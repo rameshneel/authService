@@ -1,0 +1,38 @@
+{
+  "name": "bizpickr",
+  "version": "1.0.0",
+  "description": "a project for Biz Picker",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js",
+    "pre-commit": "lint-staged",
+    "prepare": "node prepare.js",
+    "start:test-server": "node -r dotenv/config --experimental-json-modules e2e/test-server.js",
+    "test:playwright": "set NODE_OPTIONS=--experimental-vm-modules -r dotenv/config --experimental-json-modules && npx playwright test",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "neel networks",
+  "license": "ISC",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.3",
+    "@grpc/proto-loader": "^0.7.15",
+    "amqplib": "^0.10.8",
+    "axios": "^1.9.0",
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.14.0",
+    "nodemailer": "^6.10.1",
+    "redis": "^5.0.1",
+    "sequelize": "^6.37.7",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
