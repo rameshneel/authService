@@ -4,7 +4,7 @@ import { env } from "./env.js";
 import logger from "./logger.js";
 const redisConfig = {
   // Connection URL
-  url: env.REDIS_URL || "redis://localhost:6379",
+  url: env.REDIS_URLs,
   options: {
     socket: {
       reconnectStrategy: (retries) => {

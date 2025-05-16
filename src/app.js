@@ -4,7 +4,9 @@ import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import { errorHandler } from "./utils/errorHandler.js";
-const allowedOrigins = process.env.CORS_ORIGIN?.split(",") || [];
+import { env } from "./config/env.js";
+
+const allowedOrigins = env.CORS_ORIGINS.split(",");
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
@@ -44,10 +46,15 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
 //routes import
-import authRoutes from "./routes/auth.routes.js";
+import authRoutes from "./routes/auth.route.js";
 
 //routes declaration
 app.use("/api/v1/auth", authRoutes);
+
+//dummy route
+app.get("/", (req, res) => {
+  res.send("hello from auth service");
+});
 
 app.use(errorHandler);
 

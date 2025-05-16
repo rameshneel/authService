@@ -3,8 +3,8 @@ import { DataTypes } from "sequelize";
 import sequelize from "../db/index.js";
 import { Op } from "sequelize";
 
-const AuthToken = sequelize.define(
-  "AuthToken",
+const Session = sequelize.define(
+  "Session",
   {
     id: {
       type: DataTypes.INTEGER,
@@ -15,18 +15,14 @@ const AuthToken = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "users",
+        model: "auth_users",
         key: "id",
       },
     },
-    accessToken: {
-      type: DataTypes.STRING(512),
-      allowNull: true,
-    },
-
     refreshToken: {
       type: DataTypes.STRING(512),
       allowNull: true,
+      unique: true,
     },
     provider: {
       type: DataTypes.ENUM("google", "manual"),
@@ -44,30 +40,38 @@ const AuthToken = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
-    lastUsed: {
+    lastActiveAt: {
       type: DataTypes.DATE,
       allowNull: true,
     },
     expiresAt: {
       type: DataTypes.DATE,
-      allowNull: false,
+      allowNull: true,
     },
-    isValid: {
+    isRevoked: {
       type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
+      defaultValue: false,
+    },
+    rotatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    sessionVersion: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 1,
+    },
+    mfaVerified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
     },
   },
   {
-    tableName: "auth_tokens",
+    tableName: "sessions",
     timestamps: true,
     indexes: [
       { fields: ["userId"] },
-      {
-        fields: ["accessToken"],
-        unique: true,
-        where: { accessToken: { [Op.ne]: null } },
-      },
       {
         fields: ["refreshToken"],
         unique: true,
@@ -77,4 +81,4 @@ const AuthToken = sequelize.define(
   }
 );
 
-export default AuthToken;
+export default Session;
