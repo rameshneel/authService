@@ -18,7 +18,7 @@ router.post("/login", loginUser);
 router.post("/logout", verifyJWT, logoutUser);
 
 router.get("/login/google", loginWithGoogle);
-// router.get("/google/callback", googleCallback);
+router.get("/google/callback", googleCallback);
 
 router.post("/verify-token", verifyToken);
 router.get("/refresh-token", refreshAccessToken);
