@@ -1,43 +1,24 @@
-import { env } from "./config/env.js";
-import sequelize from "./db/index.js";
 import { app } from "./app.js";
-// import redisClient from "./config/redis.js";
-// import { initializeRabbitMQ } from "./events/index.js";
-// import grpcServer from "./grpc/index.js";
+import { env } from "./config/env.js";
+import { connectDB } from "./db/index.js";
+import { logInfo, logError } from "./config/logger.js";
 
-// async function initiateRedis() {
-//   try {
-//     await redisClient.init();
-//   } catch (error) {
-//     console.error("Error:", error);
-//   }
-// }
+const start = async () => {
+  try {
+    await connectDB();
+    logInfo("Database connected successfully");
 
-// Initialize RabbitMQ and consumers
-// grpcServer();
-// initializeRabbitMQ();
-// initiateRedis();
+    app.listen(env.PORT, () => {
+      logInfo(`Server listening on port ${env.PORT}`);
+    });
 
-// Sync without dropping tables (no data loss)
-sequelize
-  .sync({ force: false })
-  .then(() => {
-    console.log("✔️ Tables synchronized successfully!");
-
-    // Authenticate DB connection and start the server
-    sequelize
-      .authenticate()
-      .then(() => {
-        app.listen(env.PORT, () => {
-          console.log(`⚙️ Server is running at port : ${env.PORT}`);
-        });
-      })
-      .catch((err) => {
-        console.log("❌ MySQL db connection failed: ", err);
-        process.exit(1);
-      });
-  })
-  .catch((err) => {
-    console.log("❌ Error synchronizing tables: ", err);
+    app.on("error", (err) => {
+      logError("Server encountered an error", err);
+    });
+  } catch (error) {
+    logError("Something went wrong while initiating server", error);
     process.exit(1);
-  });
+  }
+};
+
+start();

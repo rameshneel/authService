@@ -1,9 +1,8 @@
 import { Sequelize } from "sequelize";
 import { env } from "../config/env.js";
-// Sequelize (MySQL) Connection
 
 const sequelize = new Sequelize(env.DB_NAME, env.DB_USER, env.DB_PASSWORD, {
-  host: env.DB_HOST,
+  host: process.env.DB_HOST,
   dialect: "mysql",
   logging: process.env.NODE_ENV === "development" ? console.log : false,
   pool: {
@@ -13,5 +12,16 @@ const sequelize = new Sequelize(env.DB_NAME, env.DB_USER, env.DB_PASSWORD, {
     idle: 10000,
   },
 });
+
+export const connectDB = async () => {
+  try {
+    await sequelize.sync({ force: false });
+    console.log("✔️ Tables synchronized successfully!");
+    await sequelize.authenticate();
+  } catch (error) {
+    console.log("❌ MySQL db connection failed: ", error);
+    process.exit(1);
+  }
+};
 
 export default sequelize;

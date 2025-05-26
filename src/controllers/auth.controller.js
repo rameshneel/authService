@@ -6,6 +6,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
+import { profile } from "console";
 
 export const generateTokens = async (user) => {
   const accessToken = await user.generateAccessToken();
@@ -25,7 +26,7 @@ export const cookieOptions = {
 };
 
 export const signupUser = asyncHandler(async (req, res, next) => {
-  const { type } = req.body;
+  const type = req?.body?.type?.toLowerCase();
   const schema = signupSchemas[type];
 
   if (!schema) {
@@ -47,18 +48,24 @@ export const signupUser = asyncHandler(async (req, res, next) => {
     throw new ApiError(400, `${type} already exists with this email`);
   }
 
-  // Call User Service to create profile
-  const { data, status } = await axios.post(
-    `${env.USER_SERVICE_URL}/user/create-profile`,
-    {
-      email,
-      type,
-      ...profileData,
-    }
-  );
-
-  if (status === 500) {
-    throw new ApiError(500, "something went wrong while sending axios request");
+  let data, status;
+  try {
+    const response = await axios.post(
+      `${env.USER_SERVICE_URL}/user/create-profile`,
+      {
+        email,
+        type,
+        ...profileData,
+      }
+    );
+    data = response.data;
+    status = response.status;
+  } catch (error) {
+    const message =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      "Something went wrong while creating user profile";
+    throw new ApiError(error.response?.status || 500, message);
   }
 
   const { userId } = data;
@@ -102,6 +109,13 @@ export const loginUser = asyncHandler(async (req, res, next) => {
 
     if (!user) {
       throw new ApiError(404, `${type} not found with this email`);
+    }
+
+    if (user.provider === "google" && user.providerId && !user.password) {
+      throw new ApiError(
+        400,
+        "This account was created with Google. Please use 'Login with Google'."
+      );
     }
 
     const isPasswordValid = await user.isValidPassword(password);
@@ -233,6 +247,130 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
     if (error.name === "TokenExpiredError") {
       throw new ApiError(401, "Refresh token expired");
     }
+    next(error);
+  }
+});
+
+export const getUserProfile = asyncHandler(async (req, res, next) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "User profile retrieved successfully"));
+});
+
+export const loginWithGoogle = asyncHandler(async (req, res, next) => {
+  const redirectUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${env.GOOGLE_CLIENT_ID}` +
+    `&redirect_uri=${env.GOOGLE_REDIRECT_URI}` +
+    `&response_type=code` +
+    `&scope=email%20profile`;
+  return res.redirect(redirectUrl);
+});
+
+export const googleCallback = asyncHandler(async (req, res, next) => {
+  const { code } = req.query;
+
+  if (!code) {
+    throw new ApiError(400, "Authorization code is missing");
+  }
+
+  try {
+    const tokenResponse = await axios.post(
+      `https://oauth2.googleapis.com/token`,
+      null,
+      {
+        params: {
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: env.GOOGLE_REDIRECT_URI,
+          grant_type: "authorization_code",
+          code,
+        },
+      }
+    );
+
+    const { access_token } = tokenResponse.data;
+
+    const userInfoResponse = await axios.get(
+      `https://www.googleapis.com/oauth2/v1/userinfo`,
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+
+    const userInfo = userInfoResponse.data;
+
+    let user = await AuthUser.findOne({
+      where: {
+        email: userInfo.email,
+        provider: "google",
+        providerId: userInfo.id,
+      },
+    });
+
+    if (!user) {
+      let userId;
+      try {
+        const response = await axios.post(
+          `${env.USER_SERVICE_URL}/user/create-profile`,
+          {
+            email: userInfo.email,
+            type: "customer",
+            fullName: userInfo.name,
+          }
+        );
+
+        console.log("response", response.data);
+
+        userId = response.data?.userId;
+      } catch (error) {
+        throw new ApiError(
+          error.response?.status || 500,
+          error.response?.data?.error ||
+            "Something went wrong while creating user profile"
+        );
+      }
+
+      user = await AuthUser.create({
+        email: userInfo.email,
+        type: "customer",
+        password: null,
+        provider: "google",
+        linkedUserId: userId,
+        providerId: userInfo.id,
+      });
+    }
+
+    const { accessToken, refreshToken } = await generateTokens(user);
+
+    res.cookie("accessToken", accessToken, cookieOptions);
+    res.cookie("refreshToken", refreshToken, cookieOptions);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          user: {
+            id: user.id,
+            linkedUserId: user.linkedUserId,
+            email: user.email,
+            type: user.type,
+            provider: user.provider,
+            emailVerified: user.emailVerified,
+          },
+        },
+        "Google login successful"
+      )
+    );
+  } catch (error) {
     next(error);
   }
 });
