@@ -23,5 +23,8 @@ router.get("/google/callback", googleCallback);
 router.post("/verify-token", verifyToken);
 router.get("/refresh-token", refreshAccessToken);
 router.get("/get-user", verifyJWT, getUserProfile);
+router.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 
 export default router;
