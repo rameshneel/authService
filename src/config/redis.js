@@ -5,7 +5,6 @@ import logger from "./logger.js";
 const redisConfig = {
   // Connection URL
   url: env.REDIS_URLs,
-
   options: {
     socket: {
       reconnectStrategy: (retries) => {

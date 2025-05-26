@@ -22,7 +22,8 @@ const AuthUser = sequelize.define(
     },
     password: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
+      defaultValue: null,
     },
     linkedUserId: {
       type: DataTypes.INTEGER,
@@ -38,7 +39,7 @@ const AuthUser = sequelize.define(
       allowNull: true,
     },
     provider: {
-      type: DataTypes.ENUM("manual", "google", "facebook"),
+      type: DataTypes.ENUM("manual", "google"),
       allowNull: true,
       defaultValue: "manual",
     },
@@ -93,6 +94,7 @@ const AuthUser = sequelize.define(
 
 AuthUser.beforeCreate(async (user, options) => {
   const salt = await bcrypt.genSalt(10);
+  if (user.password == null) return;
   user.password = await bcrypt.hash(user.password, salt);
 });
 
