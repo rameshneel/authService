@@ -7,6 +7,7 @@ import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
+import { createUserProfile } from "../grpc/client/userClient.js";
 
 export const generateTokens = async (user) => {
   const accessToken = await user.generateAccessToken();
@@ -50,14 +51,19 @@ export const signupUser = asyncHandler(async (req, res, next) => {
 
   let data, status;
   try {
-    const response = await axios.post(
-      `${env.USER_SERVICE_URL}/user/create-profile`,
-      {
-        email,
-        type,
-        ...profileData,
-      }
-    );
+    // const response = await axios.post(
+    //   `${env.USER_SERVICE_URL}/user/create-profile`,
+    //   {
+    //     email,
+    //     type,
+    //     ...profileData,
+    //   }
+    // );
+    data = await createUserProfile({
+      email,
+      type,
+      ...profileData,
+    });
     data = response.data;
     status = response.status;
   } catch (error) {

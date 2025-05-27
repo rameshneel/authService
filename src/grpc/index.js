@@ -1,9 +1,9 @@
 import logger from "../config/logger.js";
-import { startGrpcServer } from "./server/authServer.js";
+import { startUserGrpcServer } from "./server/user.server.js";
 
 async function grpcServer() {
   try {
-    startGrpcServer();
+    startUserGrpcServer();
     logger.info("gRPC server initialized");
   } catch (error) {
     logger.error("Failed to start AuthService:", error);

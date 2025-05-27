@@ -1,7 +1,6 @@
 import { env } from "./config/env.js";
 import sequelize from "./db/index.js";
 import { app } from "./app.js";
-import redisClient from "./config/redis.js";
 import { initializeRabbitMQ } from "./events/index.js";
 import grpcServer from "./grpc/index.js";
 
