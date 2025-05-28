@@ -2,7 +2,7 @@ import { env } from "./config/env.js";
 import sequelize from "./db/index.js";
 import { app } from "./app.js";
 import { initializeRabbitMQ } from "./events/index.js";
-import grpcServer from "./grpc/index.js";
+import initializeGrpcServices from "./grpc/index.js";
 
 // Test Redis connection
 const testRedisConnection = async () => {
@@ -15,9 +15,9 @@ const testRedisConnection = async () => {
 };
 
 // Initialize RabbitMQ and consumers
-grpcServer();
-initializeRabbitMQ();
-testRedisConnection();
+// await initializeGrpcServices();
+// await initializeRabbitMQ();
+// await testRedisConnection();
 
 // Sync without dropping tables (no data loss)
 sequelize

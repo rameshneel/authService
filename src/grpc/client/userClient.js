@@ -3,6 +3,7 @@ import protoLoader from "@grpc/proto-loader";
 import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "../../config/env.js";
+import logger from "../../config/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,73 +26,79 @@ const client = new userPackage.UserService(
   grpc.credentials.createInsecure()
 );
 
-export const createUserProfile = (userData) => {
+const DEADLINE_MS = 10000; // 10 seconds
+
+// Connection health check
+export const checkUserServiceHealth = () => {
   return new Promise((resolve, reject) => {
-    client.CreateProfile(userData, (err, response) => {
-      if (err) return reject(err);
+    const deadline = Date.now() + 5000;
+
+    client.waitForReady(deadline, (error) => {
+      if (error) {
+        logger.error("UserService not ready:", error);
+        reject(error);
+      } else {
+        logger.info("UserService is ready");
+        resolve();
+      }
+    });
+  });
+};
+
+// Create user profile
+export const createUserProfile = (userData) => {
+  console.log("userData", userData);
+
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + DEADLINE_MS;
+
+    logger.info("Sending user data to UserService:", userData);
+
+    client.CreateProfile(userData, { deadline }, (err, response) => {
+      if (err) {
+        logger.error("gRPC CreateProfile error:", {
+          code: err.code,
+          message: err.message,
+          details: err.details,
+        });
+        return reject(err);
+      }
+
+      logger.info("gRPC CreateProfile response:", response);
+      resolve(response);
+    });
+  });
+};
+// Get user by ID
+export const getUserById = (userId) => {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + DEADLINE_MS;
+
+    client.GetUserById({ userId }, { deadline }, (err, response) => {
+      if (err) {
+        logger.error("gRPC GetUserById error:", err);
+        return reject(err);
+      }
+
+      logger.info("gRPC GetUserById response:", response);
       resolve(response);
     });
   });
 };
 
-// // authService/src/grpc/client/authClient.js
-// import grpc from "@grpc/grpc-js";
-// import protoLoader from "@grpc/proto-loader";
-// import path from "path";
-// import { fileURLToPath } from "url";
-// import { env } from "../../config/env.js";
+// Connection monitoring
+client
+  .getChannel()
+  .watchConnectivityState(
+    grpc.connectivityState.IDLE,
+    Date.now() + 5000,
+    (error) => {
+      if (error) {
+        logger.error("Connection state change error:", error);
+      } else {
+        logger.info("Connection state changed to UserService");
+      }
+    }
+  );
 
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
-
-// const PROTO_PATH = path.join(__dirname, "../proto/auth.proto");
-// const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-//   keepCase: true,
-//   longs: String,
-//   enums: String,
-//   defaults: true,
-//   oneofs: true,
-// });
-// const grpcObject = grpc.loadPackageDefinition(packageDefinition);
-// const authPackage = grpcObject.authPackage;
-
-// const client = new authPackage.AuthService(
-//   `${env.GRPC_AUTH_SERVICE_HOST}:${env.GRPC_AUTH_SERVICE_PORT}`,
-//   grpc.credentials.createInsecure()
-// );
-
-// export function registerUser(email, password, name) {
-//   return new Promise((resolve, reject) => {
-//     client.Register({ email, password, name }, (err, response) => {
-//       if (err) return reject(err);
-//       resolve(response);
-//     });
-//   });
-// }
-
-// export function loginUser(email, password) {
-//   return new Promise((resolve, reject) => {
-//     client.Login({ email, password }, (err, response) => {
-//       if (err) return reject(err);
-//       resolve(response);
-//     });
-//   });
-// }
-
-// export function logoutUser(token) {
-//   return new Promise((resolve, reject) => {
-//     client.Logout({ token }, (err, response) => {
-//       if (err) return reject(err);
-//       resolve(response);
-//     });
-//   });
-// }
-
-// export function checkAuthStatus(token) {
-//   return new Promise((resolve, reject) => {
-//     client.CheckAuthStatus({ token }, (err, response) => {
-//       if (err) return reject(err);
-//       resolve(response);
-//     });
-//   });
-// }
+export default client;

@@ -14,10 +14,21 @@ message CreateProfileRequest {
   string companyName = 5;
   string country = 6;
   string role = 7;
-}
+} 
 
 message CreateProfileResponse {
   string userId = 1;
   string message = 2;
   bool success = 3;
+}
+
+message GetUserRequest {
+  string userId = 1;
+}
+
+message GetUserResponse {
+  string userId = 1;
+  string email = 2;
+  string fullName = 3;
+  bool success = 4;
 }

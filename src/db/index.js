@@ -12,16 +12,4 @@ const sequelize = new Sequelize(env.DB_NAME, env.DB_USER, env.DB_PASSWORD, {
     idle: 10000,
   },
 });
-
-export const connectDB = async () => {
-  try {
-    await sequelize.sync({ force: false });
-    console.log("✔️ Tables synchronized successfully!");
-    await sequelize.authenticate();
-  } catch (error) {
-    console.log("❌ MySQL db connection failed: ", error);
-    process.exit(1);
-  }
-};
-
 export default sequelize;

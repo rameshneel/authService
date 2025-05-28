@@ -13,18 +13,15 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.post("/signup", signupUser);
-router.post("/login", loginUser);
-router.post("/logout", verifyJWT, logoutUser);
+router.route("/signup").post(signupUser);
+router.route("/login").post(loginUser);
+router.route("/logout").post(verifyJWT, logoutUser);
 
-router.get("/login/google", loginWithGoogle);
-router.get("/google/callback", googleCallback);
+router.route("/login/google").get(loginWithGoogle);
+router.route("/google/callback").get(googleCallback);
 
-router.post("/verify-token", verifyToken);
-router.get("/refresh-token", refreshAccessToken);
-router.get("/get-user", verifyJWT, getUserProfile);
-router.get("/health", (req, res) => {
-  res.status(200).send("OK");
-});
+router.route("/verify-token").post(verifyToken);
+router.route("/refresh-token").get(refreshAccessToken);
+router.route("/get-user").get(verifyJWT, getUserProfile);
 
 export default router;

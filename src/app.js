@@ -47,12 +47,9 @@ app.use(cookieParser());
 
 //routes import
 import authRoutes from "./routes/auth.route.js";
-import { googleCallback } from "./controllers/auth.controller.js";
 
 //routes declaration
 app.use("/api/v1/auth", authRoutes);
-
-app.use("/auth/google/callback", googleCallback);
 
 //dummy route
 app.get("/", (req, res) => {
@@ -60,7 +57,6 @@ app.get("/", (req, res) => {
 });
 
 app.use(errorHandler);
-
 // Handle 404 errors
 app.use((req, res) => {
   res.status(404).json({ message: "No route found" });

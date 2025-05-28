@@ -7,7 +7,7 @@ import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
-import { createUserProfile } from "../grpc/client/userClient.js";
+import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
 
 export const generateTokens = async (user) => {
   const accessToken = await user.generateAccessToken();
@@ -27,77 +27,77 @@ export const cookieOptions = {
 };
 
 export const signupUser = asyncHandler(async (req, res, next) => {
-  const type = req?.body?.type?.toLowerCase();
-  const schema = signupSchemas[type];
-
-  if (!schema) {
-    throw new ApiError(400, "Invalid user type");
-  }
-
-  const { error, value } = schema.validate(req.body);
-  if (error) {
-    const errorMessages = error.details.map((err) =>
-      err.message.replace(/["]/g, "")
-    );
-    throw new ApiError(400, "Validation error", errorMessages);
-  }
-
-  const { email, password, ...profileData } = value;
-
-  const existingUser = await AuthUser.findOne({ where: { email, type } });
-  if (existingUser) {
-    throw new ApiError(400, `${type} already exists with this email`);
-  }
-
-  let data, status;
+  console.log("signupUser", req.body);
   try {
-    // const response = await axios.post(
-    //   `${env.USER_SERVICE_URL}/user/create-profile`,
-    //   {
-    //     email,
-    //     type,
-    //     ...profileData,
-    //   }
-    // );
-    data = await createUserProfile({
+    const type = req?.body?.type?.toLowerCase();
+    const schema = signupSchemas[type];
+
+    if (!schema) {
+      throw new ApiError(400, "Invalid user type");
+    }
+
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+      const errorMessages = error.details.map((err) =>
+        err.message.replace(/["]/g, "")
+      );
+      throw new ApiError(400, "Validation error", errorMessages);
+    }
+
+    const { email, password, ...profileData } = value;
+
+    const existingUser = await AuthUser.findOne({ where: { email, type } });
+    if (existingUser) {
+      throw new ApiError(400, `${type} already exists with this email`);
+    }
+
+    // Call User Service via gRPC
+    const userData = {
       email,
       type,
-      ...profileData,
+      fullName: profileData.fullName,
+    };
+
+    const userResponse = await createUserProfile(userData);
+    console.log("userResponse", userResponse);
+
+    // Check if the user profile creation was successful
+    if (!userResponse) {
+      throw new ApiError(
+        400,
+        userResponse.message || "Failed to create user profile"
+      );
+    }
+
+    const { userId } = userResponse; // Assuming the response contains userId
+
+    // Create the AuthUser
+    const authUser = await AuthUser.create({
+      email,
+      password,
+      type,
+      linkedUserId: userId,
     });
-    data = response.data;
-    status = response.status;
+
+    return res.status(201).json(
+      new ApiResponse(
+        201,
+        {
+          authId: authUser.id,
+          userId,
+          email: authUser.email,
+          type,
+        },
+        `${type} registered successfully`
+      )
+    );
   } catch (error) {
-    const message =
-      error.response?.data?.error ||
-      error.response?.data?.message ||
-      "Something went wrong while creating user profile";
-    throw new ApiError(error.response?.status || 500, message);
+    next(error); // Pass any caught error to the error-handling middleware
   }
-
-  const { userId } = data;
-
-  const authUser = await AuthUser.create({
-    email,
-    password,
-    type,
-    linkedUserId: userId,
-  });
-
-  return res.status(201).json(
-    new ApiResponse(
-      201,
-      {
-        authId: authUser.id,
-        userId,
-        email: authUser.email,
-        type,
-      },
-      `${type} registered successfully`
-    )
-  );
 });
 
-//login
+// login;
+
 export const loginUser = asyncHandler(async (req, res, next) => {
   const { error, value } = commonLoginSchema(req.body);
 
@@ -128,7 +128,12 @@ export const loginUser = asyncHandler(async (req, res, next) => {
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid email or password");
     }
+    const userResponse = await getUserById(user.linkedUserId);
+    console.log("userResponse", userResponse);
 
+    if (!userResponse) {
+      throw new ApiError(404, "User profile not found");
+    }
     const { accessToken, refreshToken } = await generateTokens(user);
 
     // Store session data in cache

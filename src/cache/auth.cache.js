@@ -15,15 +15,18 @@ const EXPIRY = {
 export const authCache = {
   async storeUserSession(userId, sessionData) {
     const key = `${PREFIX.USER_SESSION}${userId}`;
-    await redis.set(key, JSON.stringify(sessionData), {
-      ttl: EXPIRY.USER_SESSION,
-    });
+    await redis.set(
+      key,
+      JSON.stringify(sessionData),
+      "EX",
+      EXPIRY.USER_SESSION
+    ); //
   },
 
   async getUserSession(userId) {
     const key = `${PREFIX.USER_SESSION}${userId}`;
-    const data = await redis.get(key, true); // true for JSON parsing
-    return data;
+    const data = await redis.get(key);
+    return data ? JSON.parse(data) : null;
   },
 
   async removeUserSession(userId) {
@@ -33,7 +36,7 @@ export const authCache = {
 
   async blacklistToken(token) {
     const key = `${PREFIX.BLACKLISTED_TOKEN}${token}`;
-    await redis.set(key, "1", { ttl: EXPIRY.BLACKLISTED_TOKEN });
+    await redis.set(key, "1", "EX", EXPIRY.BLACKLISTED_TOKEN);
   },
 
   async isTokenBlacklisted(token) {
@@ -51,7 +54,7 @@ export const authCache = {
     return await redis.smembers(key);
   },
 
-  async removeUserSession(userId, sessionId) {
+  async removeUserSessionById(userId, sessionId) {
     const key = `${PREFIX.USER_SESSION}${userId}:sessions`;
     await redis.srem(key, sessionId);
   },
