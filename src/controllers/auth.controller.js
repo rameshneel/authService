@@ -7,7 +7,7 @@ import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
-import { createUserProfile } from "../grpc/client/userClient.js";
+// import { createUserProfile } from "../grpc/client/userClient.js";
 
 export const generateTokens = async (user) => {
   const accessToken = await user.generateAccessToken();
@@ -51,22 +51,25 @@ export const signupUser = asyncHandler(async (req, res, next) => {
 
   let data, status;
   try {
-    // const response = await axios.post(
-    //   `${env.USER_SERVICE_URL}/user/create-profile`,
-    //   {
-    //     email,
-    //     type,
-    //     ...profileData,
-    //   }
-    // );
-    data = await createUserProfile({
-      email,
-      type,
-      ...profileData,
-    });
+    const response = await axios.post(
+      `http://localhost:8900/api/v1/user/create-profile`,
+      {
+        email,
+        type,
+        ...profileData,
+      }
+    );
+    console.log("User profile creation response:", response.data);
+    // const response = await createUserProfile({
+    //   email,
+    //   type,
+    //   ...profileData,
+    // });
+    // console.log("User profile creation response:", response);
     data = response.data;
     status = response.status;
   } catch (error) {
+    console.error("gRPC createUserProfile error:", error);
     const message =
       error.response?.data?.error ||
       error.response?.data?.message ||
@@ -138,8 +141,8 @@ export const loginUser = asyncHandler(async (req, res, next) => {
       type: user.type,
       lastActive: new Date().toISOString(),
     };
-    await authCache.storeUserSession(user.id, sessionData);
-    await authCache.addUserSession(user.id, refreshToken);
+    // await authCache.storeUserSession(user.id, sessionData);
+    // await authCache.addUserSession(user.id, refreshToken);
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,

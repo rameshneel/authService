@@ -24,6 +24,8 @@ export const env = {
   DB_NAME: process.env.DB_NAME || "auth_service",
   CORS_ORIGINS: process.env.CORS_ORIGIN || [],
   USER_SERVICE_URL: process.env.USER_SERVICE_URL || "http://localhost:8900",
+  NOTIFICATION_SERVICE_URL:
+    process.env.NOTIFICATION_SERVICE_URL || "http://localhost:8901",
   GRPC_USER_SERVICE_HOST: process.env.GRPC_USER_SERVICE_HOST || "localhost",
   GRPC_USER_SERVICE_PORT: process.env.GRPC_USER_SERVICE_PORT || 50051,
 };

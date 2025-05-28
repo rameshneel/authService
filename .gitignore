@@ -154,3 +154,8 @@ NOTES.md
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+#keys
+# Ignore the keys folder    
+/keys
+*.pem

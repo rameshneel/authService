@@ -48,6 +48,7 @@ app.use(cookieParser());
 //routes import
 import authRoutes from "./routes/auth.route.js";
 import { googleCallback } from "./controllers/auth.controller.js";
+import { sendHiToUserService } from "./grpc/index.js";
 
 //routes declaration
 app.use("/api/v1/auth", authRoutes);
@@ -57,6 +58,7 @@ app.use("/auth/google/callback", googleCallback);
 //dummy route
 app.get("/", (req, res) => {
   res.send("hello from auth service");
+  sendHiToUserService();
 });
 
 app.use(errorHandler);

@@ -21,7 +21,6 @@ export function startUserGrpcServer() {
       console.log(
         `UserService gRPC server running on ${env.GRPC_USER_SERVICE_HOST}:${env.GRPC_USER_SERVICE_PORT}`
       );
-      server.start();
     }
   );
 }

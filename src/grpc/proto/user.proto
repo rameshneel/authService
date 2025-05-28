@@ -1,9 +1,10 @@
 syntax = "proto3";
 
-package userPackage;
+package user; // Use the same package name everywhere
 
 service UserService {
   rpc CreateProfile (CreateProfileRequest) returns (CreateProfileResponse);
+  rpc GetUserProfile (UserProfileRequest) returns (UserProfileResponse);
 }
 
 message CreateProfileRequest {
@@ -20,4 +21,29 @@ message CreateProfileResponse {
   string userId = 1;
   string message = 2;
   bool success = 3;
+}
+
+message UserProfileRequest {
+  string email = 1;
+}
+
+message UserProfileResponse {
+  string email = 1;
+  string name = 2;
+  string type = 3;
+  string role = 4;
+  Address address = 5;
+  string phone = 6;
+  CommonError error = 7;
+}
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string country = 3;
+}
+
+message CommonError {
+  string code = 1;
+  string message = 2;
 }
