@@ -1,60 +1,55 @@
 import express from "express";
 import cors from "cors";
+// import helmet from "helmet";
+// import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
-import { errorHandler } from "./utils/errorHandler.js";
-import { logger, safeLogger } from "./config/logger.js";
-import { env } from "./config/env.js";
 import { correlationIdMiddleware } from "./config/requestContext.js";
+import { errorHandler } from "./utils/errorHandler.js";
+import { env } from "./config/env.js";
+import { safeLogger } from "./config/logger.js";
+import authRoutes from "./routes/auth.route.js";
 
 const allowedOrigins = env.CORS_ORIGINS.split(",");
+const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const app = express();
 
+// ✅ Middlewares
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
       }
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    secure: false,
-    optionSuccessStatus: 200,
-    Headers: true,
-    exposedHeaders: "Set-Cookie",
+    exposedHeaders: ["Set-Cookie"],
     methods: ["GET", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Access-Control-Allow-Origin",
-      "Content-Type",
-      "Authorization",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-app.use("/public", express.static(path.join(__dirname, "..", "public")));
+// app.use(helmet());
+// app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 app.use(correlationIdMiddleware);
+app.use("/public", express.static(path.join(__dirname, "..", "public")));
 
-//routes import
-import authRoutes from "./routes/auth.route.js";
-
-//routes declaration
+// ✅ Routes
 app.use("/api/v1/auth", authRoutes);
 
-// Handle 404 errors
-app.use((req, res) => {
-  res.status(404).json({ message: "No route found" });
-});
+app.get("/health", (req, res) => res.status(200).send("OK"));
 
+// ✅ 404 and Error Handler
+app.use((req, res) => res.status(404).json({ message: "No route found" }));
 app.use(errorHandler);
+
+// ✅ Global Errors
 process.on("uncaughtException", (err) => {
   safeLogger.error("Uncaught Exception", {
     message: err.message,
@@ -65,11 +60,12 @@ process.on("uncaughtException", (err) => {
 });
 
 process.on("unhandledRejection", (err) => {
-  safeLogger.error("Unhandled Promise Rejection", {
+  safeLogger.error("Unhandled Rejection", {
     message: err.message,
     stack: err.stack,
     correlationId: "unhandled",
   });
   process.exit(1);
 });
+
 export { app };

@@ -1,22 +1,22 @@
-// src/grpc/index.js
-import { safeLogger, logger } from "../config/logger.js";
+import { safeLogger } from "../config/logger.js";
 import {
   startAuthGrpcServer,
   stopAuthGrpcServer,
 } from "./server/auth.server.js";
 import { checkUserServiceHealth } from "./client/userClient.js";
 import { ApiError } from "../utils/ApiError.js";
-import asyncRetry from "async-retry";
+import { getCorrelationId } from "../config/requestContext.js";
+import AsyncRetry from "async-retry";
 
 // Initialize gRPC services
 async function initializeGrpcServices() {
-  const correlationId = addCorrelationId({}, {}, () => {}).correlationId; // Generate correlation ID for startup
+  const correlationId = getCorrelationId();
 
   try {
     safeLogger.info("Initializing gRPC services", { correlationId });
 
     // Check user service health with retry
-    await asyncRetry(
+    await AsyncRetry(
       async () => {
         await checkUserServiceHealth();
         safeLogger.info("Successfully connected to UserService", {
@@ -48,16 +48,16 @@ async function initializeGrpcServices() {
         : new ApiError(500, "Failed to initialize gRPC services", [
             error.message,
           ]);
-    logError("gRPC services initialization failed", apiError, {
+    safeLogger.error("gRPC services initialization failed", apiError, {
       correlationId,
     });
-    throw apiError; // Rethrow for main app to handle
+    throw apiError;
   }
 }
 
 // Graceful shutdown of gRPC services
 async function shutdownGrpcServices() {
-  const correlationId = addCorrelationId({}, {}, () => {}).correlationId;
+  const correlationId = getCorrelationId() || uuidv4();
 
   try {
     safeLogger.info("Shutting down gRPC services", { correlationId });

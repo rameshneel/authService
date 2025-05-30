@@ -1,8 +1,3 @@
-/**
- * Socket.IO Server
- *
- * This module initializes and configures the Socket.IO server
- */
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import socketConfig from "../config/socketIo.js";

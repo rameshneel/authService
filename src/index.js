@@ -1,44 +1,48 @@
+import { app } from "./app.js";
 import { env } from "./config/env.js";
 import sequelize from "./db/index.js";
-import { app } from "./app.js";
-import { initializeRabbitMQ } from "./events/index.js";
-import { initializeGrpcServices } from "./grpc/index.js";
 import { initRedis } from "./db/redis.js";
+import { initializeGrpcServices } from "./grpc/index.js";
+import { safeLogger } from "./config/logger.js";
+import { initializeRabbitMQ } from "./events/index.js";
 
-// Test Redis connection
-const testRedisConnection = async () => {
+async function startServer() {
   try {
+    await sequelize.authenticate();
+    await sequelize.sync({ force: false });
+    safeLogger.info("✔️ Database connected and tables synchronized");
+
+    await initializeGrpcServices();
+    safeLogger.info("✔️ gRPC server initialized");
+
     await initRedis();
-    console.log("Redis connection test successful");
-  } catch (error) {
-    console.error("Redis connection test failed:", error.message);
-  }
-};
+    safeLogger.info("✔️ Redis connection successful");
 
-// Initialize RabbitMQ and consumers
-// await initializeGrpcServices();
-// await initializeRabbitMQ();
-// testRedisConnection();
-// Sync without dropping tables (no data loss)
-sequelize
-  .sync({ force: false })
-  .then(() => {
-    console.log("✔️ Tables synchronized successfully!");
+    await initializeRabbitMQ();
+    safeLogger.info("✔️ RabbitMQ connection initialized");
 
-    // Authenticate DB connection and start the server
-    sequelize
-      .authenticate()
-      .then(() => {
-        app.listen(env.PORT, () => {
-          console.log(`⚙️ Server is running at port : ${env.PORT}`);
-        });
-      })
-      .catch((err) => {
-        console.log("❌ MySQL db connection failed: ", err);
-        process.exit(1);
+    const server = app.listen(env.PORT, () => {
+      safeLogger.info(`⚙️ Server is running on port ${env.PORT}`);
+    });
+
+    const gracefulShutdown = async () => {
+      safeLogger.info("🔻 Graceful shutdown initiated");
+      await sequelize.close();
+      server.close(() => {
+        safeLogger.info("🧹 Express server closed");
+        process.exit(0);
       });
-  })
-  .catch((err) => {
-    console.log("❌ Error synchronizing tables: ", err);
+    };
+
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
+  } catch (err) {
+    safeLogger.error("❌ Startup failed", {
+      message: err.message,
+      stack: err.stack,
+    });
     process.exit(1);
-  });
+  }
+}
+
+startServer();
