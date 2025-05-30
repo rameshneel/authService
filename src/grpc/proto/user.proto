@@ -4,6 +4,7 @@ package userPackage;
 
 service UserService {
   rpc CreateProfile (CreateProfileRequest) returns (CreateProfileResponse);
+  rpc GetUserById (GetUserRequest) returns (GetUserResponse);
 }
 
 message CreateProfileRequest {
@@ -14,7 +15,7 @@ message CreateProfileRequest {
   string companyName = 5;
   string country = 6;
   string role = 7;
-} 
+}
 
 message CreateProfileResponse {
   string userId = 1;
@@ -24,11 +25,13 @@ message CreateProfileResponse {
 
 message GetUserRequest {
   string userId = 1;
+  string type = 2;
 }
 
 message GetUserResponse {
   string userId = 1;
   string email = 2;
   string fullName = 3;
-  bool success = 4;
+  string type = 4;
+  bool success = 5;
 }

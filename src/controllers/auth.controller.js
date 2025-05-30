@@ -8,14 +8,24 @@ import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
 import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
+import { safeLogger } from "../config/logger.js";
 
 export const generateTokens = async (user) => {
-  const accessToken = await user.generateAccessToken();
-  const refreshToken = await user.generateRefreshToken();
+  try {
+    const accessToken = await user.generateAccessToken();
+    const refreshToken = await user.generateRefreshToken();
 
-  user.refreshToken = refreshToken;
-  await user.save();
-  return { accessToken, refreshToken };
+    user.refreshToken = refreshToken;
+    await user.save();
+    return { accessToken, refreshToken };
+  } catch (error) {
+    safeLogger.error("Error generating tokens", {
+      message: error.message,
+      stack: error.stack,
+      userId: user.id,
+    });
+    throw new ApiError(500, "Failed to generate tokens", [error.message]);
+  }
 };
 
 export const cookieOptions = {
@@ -27,31 +37,29 @@ export const cookieOptions = {
 };
 
 export const signupUser = asyncHandler(async (req, res, next) => {
-  console.log("signupUser", req.body);
+  const type = req?.body?.type?.toLowerCase();
+  const schema = signupSchemas[type];
+
+  if (!schema) {
+    throw new ApiError(400, "Invalid user type");
+  }
+
+  const { error, value } = schema.validate(req.body);
+  if (error) {
+    const errorMessages = error.details.map((err) =>
+      err.message.replace(/["]/g, "")
+    );
+    throw new ApiError(400, "Validation error", errorMessages);
+  }
+
+  const { email, password, ...profileData } = value;
+
+  const existingUser = await AuthUser.findOne({ where: { email, type } });
+  if (existingUser) {
+    throw new ApiError(400, `${type} already exists with this email`);
+  }
+
   try {
-    const type = req?.body?.type?.toLowerCase();
-    const schema = signupSchemas[type];
-
-    if (!schema) {
-      throw new ApiError(400, "Invalid user type");
-    }
-
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      const errorMessages = error.details.map((err) =>
-        err.message.replace(/["]/g, "")
-      );
-      throw new ApiError(400, "Validation error", errorMessages);
-    }
-
-    const { email, password, ...profileData } = value;
-
-    const existingUser = await AuthUser.findOne({ where: { email, type } });
-    if (existingUser) {
-      throw new ApiError(400, `${type} already exists with this email`);
-    }
-
-    // Call User Service via gRPC
     const userData = {
       email,
       type,
@@ -59,24 +67,23 @@ export const signupUser = asyncHandler(async (req, res, next) => {
     };
 
     const userResponse = await createUserProfile(userData);
-    console.log("userResponse", userResponse);
 
-    // Check if the user profile creation was successful
     if (!userResponse) {
-      throw new ApiError(
-        400,
-        userResponse.message || "Failed to create user profile"
-      );
+      throw new ApiError(400, "Failed to create user profile");
     }
 
-    const { userId } = userResponse; // Assuming the response contains userId
-
-    // Create the AuthUser
+    const { userId } = userResponse;
     const authUser = await AuthUser.create({
       email,
       password,
       type,
       linkedUserId: userId,
+    });
+
+    safeLogger.info("User registered successfully", {
+      userId,
+      authId: authUser.id,
+      type,
     });
 
     return res.status(201).json(
@@ -92,11 +99,15 @@ export const signupUser = asyncHandler(async (req, res, next) => {
       )
     );
   } catch (error) {
-    next(error); // Pass any caught error to the error-handling middleware
+    safeLogger.error("Signup error", {
+      message: error.message,
+      stack: error.stack,
+      email,
+      type,
+    });
+    next(error);
   }
 });
-
-// login;
 
 export const loginUser = asyncHandler(async (req, res, next) => {
   const { error, value } = commonLoginSchema(req.body);
@@ -128,32 +139,37 @@ export const loginUser = asyncHandler(async (req, res, next) => {
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid email or password");
     }
-    const userResponse = await getUserById(user.linkedUserId);
-    console.log("userResponse", userResponse);
 
+    const userResponse = await getUserById(user.linkedUserId, user.type);
     if (!userResponse) {
       throw new ApiError(404, "User profile not found");
     }
+
     const { accessToken, refreshToken } = await generateTokens(user);
 
-    // Store session data in cache
     const sessionData = {
       userId: user.id,
       email: user.email,
       type: user.type,
       lastActive: new Date().toISOString(),
     };
+
     await authCache.storeUserSession(user.id, sessionData);
     await authCache.addUserSession(user.id, refreshToken);
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,
-      maxAge: 60 * 60 * 1000, // 1 hour
+      maxAge: 60 * 60 * 1000,
     });
 
     res.cookie("refreshToken", refreshToken, {
       ...cookieOptions,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    safeLogger.info("User logged in successfully", {
+      userId: user.id,
+      type,
     });
 
     return res.status(200).json(
@@ -163,7 +179,7 @@ export const loginUser = asyncHandler(async (req, res, next) => {
           token: accessToken,
           user: {
             id: user.id,
-            linkedUserId: user.linkedUserId,
+            linkedUserId: userResponse,
             email: user.email,
             type: user.type,
             provider: user.provider,
@@ -174,39 +190,58 @@ export const loginUser = asyncHandler(async (req, res, next) => {
       )
     );
   } catch (error) {
+    safeLogger.error("Login error", {
+      message: error.message,
+      stack: error.stack,
+      email,
+      type,
+    });
     next(error);
   }
 });
 
 export const logoutUser = asyncHandler(async (req, res, next) => {
-  const { refreshToken } = req.cookies;
+  try {
+    const { refreshToken } = req.cookies;
 
-  if (refreshToken) {
-    // Add token to blacklist
-    await authCache.blacklistToken(refreshToken);
-    // Remove session
-    await authCache.removeUserSession(req.user.id, refreshToken);
+    if (refreshToken) {
+      await authCache.blacklistToken(refreshToken);
+      await authCache.removeUserSession(req.user.id, refreshToken);
+    }
+
+    safeLogger.info("User logged out successfully", {
+      userId: req.user?.id,
+      type: req.user?.type,
+    });
+
+    return res
+      .status(200)
+      .clearCookie("accessToken", cookieOptions)
+      .clearCookie("refreshToken", cookieOptions)
+      .json(
+        new ApiResponse(
+          200,
+          {
+            userId: req.user?.id,
+          },
+          `${req.user?.type} logout successfully`
+        )
+      );
+  } catch (error) {
+    safeLogger.error("Logout error", {
+      message: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+    });
+    next(error);
   }
-  return res
-    .status(200)
-    .clearCookie("accessToken", cookieOptions)
-    .clearCookie("refreshToken", cookieOptions)
-    .json(
-      new ApiResponse(
-        200,
-        {
-          userId: req.user?.id,
-        },
-        `${req.user?.type} logout successfully`
-      )
-    );
 });
 
 export const verifyToken = asyncHandler(async (req, res, next) => {
   const { token } = req.body;
 
   if (!token) {
-    throw new ApiError(401, "token is missing");
+    throw new ApiError(401, "Token is missing");
   }
 
   try {
@@ -224,6 +259,11 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
       throw new ApiError(401, "User not found or inactive");
     }
 
+    safeLogger.info("Token verified successfully", {
+      userId: user.id,
+      type: user.type,
+    });
+
     return res.status(200).json(
       new ApiResponse(200, "Token is valid", {
         valid: true,
@@ -238,6 +278,10 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
       })
     );
   } catch (error) {
+    safeLogger.error("Token verification error", {
+      message: error.message,
+      stack: error.stack,
+    });
     throw new ApiError(401, "Invalid or expired token");
   }
 });
@@ -246,14 +290,14 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
   const { refreshToken } = req?.cookies;
 
   if (!refreshToken) {
-    throw new ApiError(400, "refresh token not found");
+    throw new ApiError(400, "Refresh token not found");
   }
 
   try {
     const decodedToken = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET);
 
     if (!decodedToken) {
-      throw new ApiError(400, "refresh token not valid");
+      throw new ApiError(400, "Refresh token not valid");
     }
 
     const user = await AuthUser.findByPk(decodedToken.id);
@@ -262,20 +306,21 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
       throw new ApiError(403, "User not found or inactive");
     }
 
-    const accessToken = user.generateAccessToken();
+    const accessToken = await user.generateAccessToken();
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,
       maxAge: 60 * 60 * 1000,
     });
 
+    safeLogger.info("Access token refreshed successfully", {
+      userId: user.id,
+    });
+
     return res
       .status(200)
       .json(new ApiResponse(200, { accessToken }, "Access token refreshed"));
   } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      throw new ApiError(401, "Refresh token expired");
-    }
     next(error);
   }
 });

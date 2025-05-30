@@ -1,66 +1,63 @@
-// logger.js
+//src/config/logger.js
 import winston from "winston";
-import fs from "fs";
+import DailyRotateFile from "winston-daily-rotate-file";
+import { getCorrelationId } from "./requestContext.js";
 
-// Ensure logs folder exists
-const logDir = "logs";
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
-}
-
-// Define custom log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  debug: 3,
-};
-
-// Define colors for development
-winston.addColors({
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  debug: "blue",
-});
-
-// Clean timestamped format — no object wrapping
-const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-  winston.format.errors({ stack: true }),
-  winston.format.printf(({ timestamp, level, message, stack }) =>
-    stack
-      ? `${timestamp} ${level}: ${message}\n${stack}`
-      : `${timestamp} ${level}: ${message}`
-  )
+const logFormat = winston.format.printf(
+  ({ level, message, timestamp, stack, ...meta }) => {
+    const correlationId = getCorrelationId();
+    return JSON.stringify({
+      timestamp,
+      level: level.toUpperCase(),
+      message,
+      ...(stack && { stack }),
+      correlationId,
+      ...meta,
+    });
+  }
 );
 
-// Create logger
 const logger = winston.createLogger({
-  levels,
-  format: logFormat,
+  level: process.env.NODE_ENV === "production" ? "info" : "debug",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    logFormat
+  ),
   transports: [
-    new winston.transports.File({ filename: "logs/app.log", level: "debug" }),
+    new winston.transports.Console(),
+    new DailyRotateFile({
+      filename: "logs/error-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      level: "error",
+      maxSize: "5m",
+      maxFiles: "14d",
+      zippedArchive: true,
+    }),
+    new DailyRotateFile({
+      filename: "logs/combined-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      maxSize: "5m",
+      maxFiles: "14d",
+      zippedArchive: true,
+    }),
   ],
 });
 
-// Add colored console output in development
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize({ all: true }),
-        logFormat
-      ),
-    })
-  );
-}
+const sanitize = (data) => {
+  const sensitive = ["password", "token", "secret", "apiKey"];
+  const cloned = { ...data };
+  for (const key of sensitive) {
+    if (cloned[key]) cloned[key] = "[REDACTED]";
+  }
+  return cloned;
+};
 
-// Helper exports
-export const logInfo = (msg) => logger.info(msg);
-export const logError = (msg, err) =>
-  logger.error(`${msg}${err ? ` - ${err.message}` : ""}`, err);
-export const logDebug = (msg) => logger.debug(msg);
-export const logWarn = (msg) => logger.warn(msg);
+const safeLogger = {
+  error: (msg, meta = {}) => logger.error(msg, sanitize(meta)),
+  warn: (msg, meta = {}) => logger.warn(msg, sanitize(meta)),
+  info: (msg, meta = {}) => logger.info(msg, sanitize(meta)),
+  debug: (msg, meta = {}) => logger.debug(msg, sanitize(meta)),
+};
 
-export default logger;
+export { logger, safeLogger };

@@ -3,7 +3,9 @@ import protoLoader from "@grpc/proto-loader";
 import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "../../config/env.js";
-import logger from "../../config/logger.js";
+import { safeLogger } from "../../config/logger.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { getCorrelationId } from "../../config/requestContext.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,77 +28,130 @@ const client = new userPackage.UserService(
   grpc.credentials.createInsecure()
 );
 
-const DEADLINE_MS = 10000; // 10 seconds
+const DEADLINE_MS = 10000;
 
-// Connection health check
+// Health check
 export const checkUserServiceHealth = () => {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
+    const correlationId = getCorrelationId();
 
     client.waitForReady(deadline, (error) => {
       if (error) {
-        logger.error("UserService not ready:", error);
-        reject(error);
-      } else {
-        logger.info("UserService is ready");
-        resolve();
+        safeLogger.error("UserService not ready", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          stack: error.stack,
+          correlationId,
+        });
+
+        return reject(
+          new ApiError(
+            error.code === grpc.status.DEADLINE_EXCEEDED ? 504 : 503,
+            "gRPC Service Unavailable",
+            [error.message]
+          )
+        );
       }
+
+      safeLogger.info("UserService is ready", { correlationId });
+      resolve();
     });
   });
 };
 
 // Create user profile
 export const createUserProfile = (userData) => {
-  console.log("userData", userData);
-
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + DEADLINE_MS;
+    const correlationId = getCorrelationId();
 
-    logger.info("Sending user data to UserService:", userData);
+    safeLogger.info("Sending user data to UserService", {
+      userData,
+      correlationId,
+    });
 
     client.CreateProfile(userData, { deadline }, (err, response) => {
       if (err) {
-        logger.error("gRPC CreateProfile error:", {
-          code: err.code,
+        safeLogger.error("gRPC CreateProfile error", {
           message: err.message,
+          code: err.code,
           details: err.details,
+          stack: err.stack,
+          correlationId,
         });
-        return reject(err);
+
+        return reject(
+          new ApiError(
+            err.code === grpc.status.NOT_FOUND ? 404 : 500,
+            "Failed to create user profile",
+            [err.message, err.details].filter(Boolean)
+          )
+        );
       }
 
-      logger.info("gRPC CreateProfile response:", response);
+      safeLogger.info("gRPC CreateProfile response", {
+        response,
+        correlationId,
+      });
       resolve(response);
     });
   });
 };
+
 // Get user by ID
-export const getUserById = (userId) => {
+export const getUserById = (userId, type) => {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + DEADLINE_MS;
-
-    client.GetUserById({ userId }, { deadline }, (err, response) => {
+    const correlationId = getCorrelationId();
+    client.GetUserById({ userId, type }, { deadline }, (err, response) => {
       if (err) {
-        logger.error("gRPC GetUserById error:", err);
-        return reject(err);
+        safeLogger.error("gRPC GetUserById error", {
+          message: err.message,
+          code: err.code,
+          details: err.details,
+          stack: err.stack,
+          correlationId,
+        });
+
+        return reject(
+          new ApiError(
+            err.code === grpc.status.NOT_FOUND ? 404 : 500,
+            "Failed to fetch user",
+            [err.message, err.details].filter(Boolean)
+          )
+        );
       }
 
-      logger.info("gRPC GetUserById response:", response);
+      safeLogger.info("gRPC GetUserById response", {
+        response,
+        correlationId,
+      });
       resolve(response);
     });
   });
 };
 
-// Connection monitoring
+// Monitor connection changes
 client
   .getChannel()
   .watchConnectivityState(
     grpc.connectivityState.IDLE,
     Date.now() + 5000,
     (error) => {
+      const correlationId = getCorrelationId();
       if (error) {
-        logger.error("Connection state change error:", error);
+        safeLogger.error("Connection state change error", {
+          message: error.message,
+          code: error.code,
+          stack: error.stack,
+          correlationId,
+        });
       } else {
-        logger.info("Connection state changed to UserService");
+        safeLogger.info("Connection state changed to UserService", {
+          correlationId,
+        });
       }
     }
   );
