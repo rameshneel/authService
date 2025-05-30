@@ -87,18 +87,18 @@ export const getUserById = (userId) => {
 };
 
 // Connection monitoring
-client
-  .getChannel()
-  .watchConnectivityState(
-    grpc.connectivityState.IDLE,
-    Date.now() + 5000,
-    (error) => {
-      if (error) {
-        logger.error("Connection state change error:", error);
-      } else {
-        logger.info("Connection state changed to UserService");
-      }
-    }
-  );
+// client
+//   .getChannel()
+//   .watchConnectivityState(
+//     grpc.connectivityState.IDLE,
+//     Date.now() + 5000,
+//     (error) => {
+//       if (error) {
+//         logger.error("Connection state change error:", error);
+//       } else {
+//         logger.info("Connection state changed to UserService");
+//       }
+//     }
+//   );
 
 export default client;

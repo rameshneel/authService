@@ -1,8 +1,6 @@
 import { DataTypes, Op } from "sequelize";
 import sequelize from "../db/index.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
 
 const AuthUser = sequelize.define(
   "AuthUser",
@@ -107,31 +105,6 @@ AuthUser.beforeUpdate(async (user, options) => {
 
 AuthUser.prototype.isValidPassword = async function (inputPassword) {
   return await bcrypt.compare(inputPassword, this.password);
-};
-
-AuthUser.prototype.generateAccessToken = function () {
-  return jwt.sign(
-    {
-      id: this.id,
-      email: this.email,
-      type: this.type,
-      linkedUserId: this.linkedUserId,
-    },
-    env.ACCESS_TOKEN_SECRET,
-    { expiresIn: env.ACCESS_TOKEN_EXPIRY }
-  );
-};
-
-AuthUser.prototype.generateRefreshToken = function () {
-  return jwt.sign(
-    {
-      id: this.id,
-      type: this.type,
-      linkedUserId: this.linkedUserId,
-    },
-    env.REFRESH_TOKEN_SECRET,
-    { expiresIn: env.REFRESH_TOKEN_EXPIRY }
-  );
 };
 
 export default AuthUser;

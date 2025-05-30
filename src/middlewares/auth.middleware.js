@@ -1,8 +1,8 @@
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import jwt from "jsonwebtoken";
 import AuthUser from "../models/authuser.model.js";
-import { env } from "../config/env.js";
+import { jwtVerify } from "jose";
+import { getPublicKey } from "../crypto/getKeys.js";
 
 export const verifyJWT = asyncHandler(async (req, res, next) => {
   const token =
@@ -15,23 +15,33 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 
   try {
     // Check if token is blacklisted
-    const isBlacklisted = await authCache.isTokenBlacklisted(token);
-    if (isBlacklisted) {
-      throw new ApiError(401, "Token has been invalidated");
+    // const isBlacklisted = await authCache.isTokenBlacklisted(token);
+    // if (isBlacklisted) {
+    //   throw new ApiError(401, "Token has been invalidated");
+    // }
+
+    const signingKey = await getPublicKey();
+
+    if (!signingKey) {
+      throw new ApiError(500, "Signing key not found");
     }
-    const decoded = jwt.verify(token, env.ACCESS_TOKEN_SECRET);
-    const user = await AuthUser.findByPk(decoded.id);
+
+    const { payload } = await jwtVerify(token, signingKey, {
+      algorithms: ["RS256"],
+    });
+
+    const user = await AuthUser.findByPk(payload.id);
 
     if (!user || !user.isActive) {
       throw new ApiError(401, "User not found or inactive");
     }
 
     // Get and update session data
-    const sessionData = await authCache.getUserSession(user.id);
-    if (sessionData) {
-      sessionData.lastActive = new Date().toISOString();
-      await authCache.storeUserSession(user.id, sessionData);
-    }
+    // const sessionData = await authCache.getUserSession(user.id);
+    // if (sessionData) {
+    //   sessionData.lastActive = new Date().toISOString();
+    //   await authCache.storeUserSession(user.id, sessionData);
+    // }
 
     // Attach auth user details to the request
     req.user = {
@@ -44,6 +54,6 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 
     next();
   } catch (err) {
-    throw new ApiError(401, "Invalid or expired access token");
+    throw new ApiError(401, err.message || "Invalid access token");
   }
 });

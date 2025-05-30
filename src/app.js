@@ -47,9 +47,11 @@ app.use(cookieParser());
 
 //routes import
 import authRoutes from "./routes/auth.route.js";
+import jwkRoutes from "./routes/jwk.route.js";
 
 //routes declaration
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/jwk", jwkRoutes);
 
 //dummy route
 app.get("/", (req, res) => {

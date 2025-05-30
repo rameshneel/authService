@@ -24,4 +24,11 @@ router.route("/verify-token").post(verifyToken);
 router.route("/refresh-token").get(refreshAccessToken);
 router.route("/get-user").get(verifyJWT, getUserProfile);
 
+router.get("/protected", verifyJWT, (req, res) => {
+  res.status(200).json({
+    message: "Protected route accessed successfully",
+    user: req.user,
+  });
+});
+
 export default router;

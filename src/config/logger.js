@@ -41,20 +41,26 @@ const logger = winston.createLogger({
   format: logFormat,
   transports: [
     new winston.transports.File({ filename: "logs/app.log", level: "debug" }),
-  ],
-});
-
-// Add colored console output in development
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize({ all: true }),
         logFormat
       ),
-    })
-  );
-}
+    }),
+  ],
+});
+
+// Add colored console output in development
+// if (process.env.NODE_ENV !== "production") {
+//   logger.add(
+//     new winston.transports.Console({
+//       format: winston.format.combine(
+//         winston.format.colorize({ all: true }),
+//         logFormat
+//       ),
+//     })
+//   );
+// }
 
 // Helper exports
 export const logInfo = (msg) => logger.info(msg);

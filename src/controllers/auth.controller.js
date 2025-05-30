@@ -8,10 +8,14 @@ import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
 import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../crypto/tokenService.js";
 
-export const generateTokens = async (user) => {
-  const accessToken = await user.generateAccessToken();
-  const refreshToken = await user.generateRefreshToken();
+const generateTokens = async (user) => {
+  const accessToken = await generateAccessToken(user);
+  const refreshToken = await generateRefreshToken(user);
 
   user.refreshToken = refreshToken;
   await user.save();
@@ -128,23 +132,23 @@ export const loginUser = asyncHandler(async (req, res, next) => {
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid email or password");
     }
-    const userResponse = await getUserById(user.linkedUserId);
-    console.log("userResponse", userResponse);
+    // const userResponse = await getUserById(user.linkedUserId);
+    // console.log("userResponse", userResponse);
 
-    if (!userResponse) {
-      throw new ApiError(404, "User profile not found");
-    }
+    // if (!userResponse) {
+    //   throw new ApiError(404, "User profile not found");
+    // }
     const { accessToken, refreshToken } = await generateTokens(user);
 
     // Store session data in cache
-    const sessionData = {
-      userId: user.id,
-      email: user.email,
-      type: user.type,
-      lastActive: new Date().toISOString(),
-    };
-    await authCache.storeUserSession(user.id, sessionData);
-    await authCache.addUserSession(user.id, refreshToken);
+    // const sessionData = {
+    //   userId: user.id,
+    //   email: user.email,
+    //   type: user.type,
+    //   lastActive: new Date().toISOString(),
+    // };
+    // await authCache.storeUserSession(user.id, sessionData);
+    // await authCache.addUserSession(user.id, refreshToken);
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,
