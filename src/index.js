@@ -1,46 +1,48 @@
-import dotenv from "dotenv";
-import sequelize from "./db/index.js";
 import { app } from "./app.js";
-import redisClient from "./config/redis.js";
+import { env } from "./config/env.js";
+import sequelize from "./db/index.js";
+import { initRedis } from "./db/redis.js";
+import { initializeGrpcServices } from "./grpc/index.js";
+import { safeLogger } from "./config/logger.js";
 import { initializeRabbitMQ } from "./events/index.js";
-import grpcServer from "./grpc/index.js";
-dotenv.config({
-  path: "./.env",
-});
 
-async function testRedis() {
+async function startServer() {
   try {
-    await redisClient.init();
-  } catch (error) {
-    console.error("Error:", error);
+    await sequelize.authenticate();
+    await sequelize.sync({ force: false });
+    safeLogger.info("✔️ Database connected and tables synchronized");
+
+    await initializeGrpcServices();
+    safeLogger.info("✔️ gRPC server initialized");
+
+    await initRedis();
+    safeLogger.info("✔️ Redis connection successful");
+
+    await initializeRabbitMQ();
+    safeLogger.info("✔️ RabbitMQ connection initialized");
+
+    const server = app.listen(env.PORT, () => {
+      safeLogger.info(`⚙️ Server is running on port ${env.PORT}`);
+    });
+
+    const gracefulShutdown = async () => {
+      safeLogger.info("🔻 Graceful shutdown initiated");
+      await sequelize.close();
+      server.close(() => {
+        safeLogger.info("🧹 Express server closed");
+        process.exit(0);
+      });
+    };
+
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
+  } catch (err) {
+    safeLogger.error("❌ Startup failed", {
+      message: err.message,
+      stack: err.stack,
+    });
+    process.exit(1);
   }
 }
 
-// Initialize RabbitMQ and consumers
-grpcServer();
-initializeRabbitMQ();
-testRedis();
-
-// Sync without dropping tables (no data loss)
-sequelize
-  .sync({ force: false })
-  .then(() => {
-    console.log("✔️ Tables synchronized successfully!");
-
-    // Authenticate DB connection and start the server
-    sequelize
-      .authenticate()
-      .then(() => {
-        app.listen(process.env.PORT || 8900, () => {
-          console.log(
-            `⚙️ Server is running at port : ${process.env.PORT || 8900}`
-          );
-        });
-      })
-      .catch((err) => {
-        console.log("❌ MySQL db connection failed: ", err);
-      });
-  })
-  .catch((err) => {
-    console.log("❌ Error synchronizing tables: ", err);
-  });
+startServer();

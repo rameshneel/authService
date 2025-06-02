@@ -1,8 +1,12 @@
 import rabbitMQConnection from "../connection.js";
-import logger from "../../config/logger.js";
+import { safeLogger } from "../../config/logger.js";
 import { rabbitMQConfig } from "../../config/rabbitMQ.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { getCorrelationId } from "../../config/requestContext.js";
 
 export async function publishUserLoginEvent(loginData) {
+  const correlationId = getCorrelationId();
+
   try {
     const exchange = rabbitMQConfig.exchanges.auth.name;
     const routingKey = "user.login";
@@ -12,9 +16,19 @@ export async function publishUserLoginEvent(loginData) {
       routingKey,
       loginData
     );
-    logger.info(`Published user.login event for ${loginData.username}`);
+    safeLogger.info("Published user.login event", {
+      username: loginData.username,
+      correlationId,
+    });
   } catch (error) {
-    logger.error("Failed to publish user.login event:", error);
-    throw error;
+    safeLogger.error("Failed to publish user.login event", {
+      message: error.message,
+      stack: error.stack,
+      loginData,
+      correlationId,
+    });
+    throw new ApiError(500, "Failed to publish user.login event", [
+      error.message,
+    ]);
   }
 }

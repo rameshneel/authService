@@ -1,6 +1,8 @@
 import amqplib from "amqplib";
 import { rabbitMQConfig, EXCHANGE_TYPES } from "../config/rabbitMQ.js";
-import logger from "../config/logger.js";
+import { safeLogger } from "../config/logger.js";
+import { ApiError } from "../utils/ApiError.js";
+import { getCorrelationId } from "../config/requestContext.js";
 
 class RabbitMQConnection {
   constructor() {
@@ -16,40 +18,55 @@ class RabbitMQConnection {
 
   async init() {
     if (this.connection || this.isConnecting) return;
+    const correlationId = getCorrelationId();
 
     try {
       this.isConnecting = true;
-      logger.info("Connecting to RabbitMQ...");
+      safeLogger.info("Connecting to RabbitMQ", { correlationId });
+
       this.connection = await amqplib.connect(
         rabbitMQConfig.url,
         rabbitMQConfig.connectionOptions
       );
+
       this.reconnectAttempts = 0;
       this.isConnecting = false;
 
-      logger.info("Successfully connected to RabbitMQ");
+      safeLogger.info("Successfully connected to RabbitMQ", { correlationId });
       this._setupEventListeners();
       await this._setupDeadLetterExchange();
       await this._setupDefaultExchanges();
       await this._setupDefaultQueues();
     } catch (error) {
       this.isConnecting = false;
-      logger.error(`Failed to connect to RabbitMQ: ${error.message}`);
+      safeLogger.error("Failed to connect to RabbitMQ", {
+        message: error.message,
+        stack: error.stack,
+        correlationId,
+      });
       await this._handleReconnect();
     }
   }
 
   _setupEventListeners() {
+    const correlationId = getCorrelationId();
+
     this.connection.on("error", async (error) => {
-      logger.error(`RabbitMQ connection error: ${error.message}`);
+      safeLogger.error("RabbitMQ connection error", {
+        message: error.message,
+        stack: error.stack,
+        correlationId,
+      });
       await this._handleReconnect();
     });
 
     this.connection.on("close", async () => {
-      logger.warn("RabbitMQ connection closed");
+      safeLogger.warn("RabbitMQ connection closed", { correlationId });
       await this._handleReconnect();
     });
   }
+
+  // ... rest of the methods with similar logging pattern updates ...
 
   async _handleReconnect() {
     if (this.isConnecting) return;
@@ -59,7 +76,7 @@ class RabbitMQConnection {
       try {
         await this.connection.close();
       } catch (error) {
-        logger.error(`Error closing RabbitMQ connection: ${error.message}`);
+        safeLogger.error(`Error closing RabbitMQ connection: ${error.message}`);
       }
       this.connection = null;
     }
@@ -69,7 +86,7 @@ class RabbitMQConnection {
       try {
         await channel.close();
       } catch (error) {
-        logger.error(`Error closing channel ${name}: ${error.message}`);
+        safeLogger.error(`Error closing channel ${name}: ${error.message}`);
       }
     }
     this.channels.clear();
@@ -79,17 +96,17 @@ class RabbitMQConnection {
       const delay =
         this.reconnectInterval *
         Math.pow(this.retryMultiplier, this.reconnectAttempts - 1);
-      logger.info(
+      safeLogger.info(
         `Attempting to reconnect to RabbitMQ in ${delay}ms... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
       );
 
       setTimeout(() => {
         this.init().catch((error) => {
-          logger.error(`Reconnection attempt failed: ${error.message}`);
+          safeLogger.error(`Reconnection attempt failed: ${error.message}`);
         });
       }, delay);
     } else {
-      logger.error(
+      safeLogger.error(
         `Failed to reconnect to RabbitMQ after ${this.maxReconnectAttempts} attempts`
       );
       // TODO: Implement circuit breaker or notify monitoring system (e.g., alert to Sentry)
@@ -122,7 +139,7 @@ class RabbitMQConnection {
     // Bind queue to exchange
     await channel.bindQueue(queue, name, routingKey);
 
-    logger.info(
+    safeLogger.info(
       `Dead letter exchange '${name}' and queue '${queue}' set up successfully`
     );
 
@@ -138,7 +155,7 @@ class RabbitMQConnection {
         exchange.type,
         exchange.options
       );
-      logger.info(
+      safeLogger.info(
         `Exchange '${exchange.name}' of type '${exchange.type}' set up successfully`
       );
     }
@@ -159,7 +176,9 @@ class RabbitMQConnection {
         );
       }
 
-      logger.info(`Queue '${queueConfig.name}' set up and bound successfully`);
+      safeLogger.info(
+        `Queue '${queueConfig.name}' set up and bound successfully`
+      );
     }
 
     await this.closeChannel("queue-setup");
@@ -176,7 +195,7 @@ class RabbitMQConnection {
         await channel.checkQueue(""); // Dummy check to verify channel
         return channel;
       } catch (error) {
-        logger.warn(`Channel '${name}' is invalid, recreating...`);
+        safeLogger.warn(`Channel '${name}' is invalid, recreating...`);
         this.channels.delete(name);
       }
     }
@@ -186,18 +205,18 @@ class RabbitMQConnection {
       this.channels.set(name, channel);
 
       channel.on("error", (error) => {
-        logger.error(`Channel '${name}' error: ${error.message}`);
+        safeLogger.error(`Channel '${name}' error: ${error.message}`);
         this.channels.delete(name);
       });
 
       channel.on("close", () => {
-        logger.info(`Channel '${name}' closed`);
+        safeLogger.info(`Channel '${name}' closed`);
         this.channels.delete(name);
       });
 
       return channel;
     } catch (error) {
-      logger.error(`Failed to create channel '${name}': ${error.message}`);
+      safeLogger.error(`Failed to create channel '${name}': ${error.message}`);
       throw error;
     }
   }
@@ -207,9 +226,9 @@ class RabbitMQConnection {
       try {
         await this.channels.get(name).close();
         this.channels.delete(name);
-        logger.info(`Channel '${name}' closed successfully`);
+        safeLogger.info(`Channel '${name}' closed successfully`);
       } catch (error) {
-        logger.error(`Error closing channel '${name}': ${error.message}`);
+        safeLogger.error(`Error closing channel '${name}': ${error.message}`);
       }
     }
   }
@@ -226,7 +245,7 @@ class RabbitMQConnection {
       ...defaultOptions,
       ...options,
     });
-    logger.info(`Exchange '${exchangeName}' created successfully`);
+    safeLogger.info(`Exchange '${exchangeName}' created successfully`);
   }
 
   async createQueue(channelName, queueName, options = {}) {
@@ -242,14 +261,14 @@ class RabbitMQConnection {
       ...defaultOptions,
       ...options,
     });
-    logger.info(`Queue '${queueName}' created successfully`);
+    safeLogger.info(`Queue '${queueName}' created successfully`);
     return queueResult;
   }
 
   async bindQueue(channelName, queueName, exchangeName, routingKey) {
     const channel = await this.createChannel(channelName);
     await channel.bindQueue(queueName, exchangeName, routingKey);
-    logger.info(
+    safeLogger.info(
       `Queue '${queueName}' bound to exchange '${exchangeName}' with routing key '${routingKey}'`
     );
   }
@@ -281,11 +300,11 @@ class RabbitMQConnection {
     );
 
     if (result) {
-      logger.info(
+      safeLogger.info(
         `Message published to exchange '${exchangeName}' with routing key '${routingKey}'`
       );
     } else {
-      logger.warn(
+      safeLogger.warn(
         `Failed to publish message to exchange '${exchangeName}' with routing key '${routingKey}'`
       );
     }
@@ -313,7 +332,7 @@ class RabbitMQConnection {
       queueName,
       async (msg) => {
         if (msg === null) {
-          logger.warn(`Consumer was cancelled by RabbitMQ: ${queueName}`);
+          safeLogger.warn(`Consumer was cancelled by RabbitMQ: ${queueName}`);
           return;
         }
 
@@ -325,7 +344,7 @@ class RabbitMQConnection {
             channel.ack(msg);
           }
         } catch (error) {
-          logger.error(
+          safeLogger.error(
             `Error processing message from queue '${queueName}': ${error.message}`
           );
           if (!consumeOptions.noAck) {
@@ -336,7 +355,7 @@ class RabbitMQConnection {
       consumeOptions
     );
 
-    logger.info(
+    safeLogger.info(
       `Consumer started for queue '${queueName}' with tag '${consumerTag}'`
     );
     return consumerTag;
@@ -344,7 +363,7 @@ class RabbitMQConnection {
 
   async cancelConsumer(channelName, consumerTag) {
     if (!this.channels.has(channelName)) {
-      logger.warn(
+      safeLogger.warn(
         `Channel '${channelName}' not found for cancelling consumer '${consumerTag}'`
       );
       return;
@@ -352,16 +371,16 @@ class RabbitMQConnection {
 
     const channel = this.channels.get(channelName);
     await channel.cancel(consumerTag);
-    logger.info(`Consumer '${consumerTag}' cancelled successfully`);
+    safeLogger.info(`Consumer '${consumerTag}' cancelled successfully`);
   }
 
   async close() {
     for (const [name, channel] of this.channels.entries()) {
       try {
         await channel.close();
-        logger.info(`Channel '${name}' closed`);
+        safeLogger.info(`Channel '${name}' closed`);
       } catch (error) {
-        logger.error(`Error closing channel '${name}': ${error.message}`);
+        safeLogger.error(`Error closing channel '${name}': ${error.message}`);
       }
     }
     this.channels.clear();
@@ -370,9 +389,9 @@ class RabbitMQConnection {
       try {
         await this.connection.close();
         this.connection = null;
-        logger.info("RabbitMQ connection closed");
+        safeLogger.info("RabbitMQ connection closed");
       } catch (error) {
-        logger.error(`Error closing RabbitMQ connection: ${error.message}`);
+        safeLogger.error(`Error closing RabbitMQ connection: ${error.message}`);
       }
     }
   }

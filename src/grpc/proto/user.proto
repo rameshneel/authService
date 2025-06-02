@@ -1,29 +1,37 @@
 syntax = "proto3";
 
-package user;
-
-import "common.proto";
+package userPackage;
 
 service UserService {
-  rpc GetUserProfile (UserProfileRequest) returns (UserProfileResponse);
+  rpc CreateProfile (CreateProfileRequest) returns (CreateProfileResponse);
+  rpc GetUserById (GetUserRequest) returns (GetUserResponse);
 }
 
-message UserProfileRequest {
+message CreateProfileRequest {
   string email = 1;
+  string type = 2;
+  string fullName = 3;
+  string name = 4;
+  string companyName = 5;
+  string country = 6;
+  string role = 7;
 }
 
-message UserProfileResponse {
-  string email = 1;
-  string name = 2;
-  string type = 3;
-  string role = 4;
-  Address address = 5;
-  string phone = 6;
-  CommonError error = 7;
+message CreateProfileResponse {
+  string userId = 1;
+  string message = 2;
+  bool success = 3;
 }
 
-message Address {
-  string street = 1;
-  string city = 2;
-  string country = 3;
+message GetUserRequest {
+  string userId = 1;
+  string type = 2;
+}
+
+message GetUserResponse {
+  string userId = 1;
+  string email = 2;
+  string fullName = 3;
+  string type = 4;
+  bool success = 5;
 }

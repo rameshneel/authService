@@ -1,397 +1,105 @@
-//authService/src/db/redis.js
+import Redis from "ioredis";
+import { env } from "../config/env.js";
+import { getCorrelationId } from "../config/requestContext.js";
+import { safeLogger } from "../config/logger.js";
 
-import { createClient } from "redis";
-import redisConfig from "../config/redis.js";
-import logger from "../config/logger.js";
+let redis;
 
-class RedisClient {
-  constructor() {
-    this.client = null;
-    this.subscriber = null;
-    this.publisher = null;
-    this.isConnected = false;
-    this.isConnecting = false;
-    this.subscribers = new Map();
-  }
+export async function initRedis() {
+  return new Promise((resolve, reject) => {
+    if (redis) return resolve(redis);
 
-  async init() {
-    if (this.client || this.isConnecting) return;
+    redis = new Redis({
+      host: env.REDIS_HOST || "localhost",
+      port: env.REDIS_PORT || 6379,
+      password: env.REDIS_PASSWORD || "root",
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      reconnectOnError: (err) => err.message.includes("READONLY"),
+    });
 
-    try {
-      this.isConnecting = true;
-      logger.info("Connecting to Redis...");
+    // Redis Events
+    redis.on("connect", () => {
+      safeLogger.info("✅ Redis connected", {
+        correlationId: getCorrelationId(),
+      });
+    });
 
-      // Create main client
-      this.client = createClient({
-        url: redisConfig.url,
-        ...redisConfig.options,
+    redis.on("ready", () => {
+      safeLogger.info("🚀 Redis client is ready", {
+        correlationId: getCorrelationId(),
+      });
+      resolve(redis);
+    });
+
+    redis.on("error", (err) => {
+      const message =
+        err.code === "ECONNREFUSED"
+          ? "❌ Redis connection refused"
+          : "❌ Redis encountered an error";
+
+      safeLogger.error(message, {
+        message: err.message,
+        stack: err.stack,
+        code: err.code,
+        correlationId: getCorrelationId(),
       });
 
-      // Create dedicated subscriber client for pub/sub
-      this.subscriber = this.client.duplicate();
-
-      // Create dedicated publisher client for pub/sub
-      this.publisher = this.client.duplicate();
-
-      // Set up event handlers for main client
-      this._setupEventListeners(this.client, "Main");
-
-      // Set up event handlers for subscriber client
-      this._setupEventListeners(this.subscriber, "Subscriber");
-
-      // Set up event handlers for publisher client
-      this._setupEventListeners(this.publisher, "Publisher");
-
-      // Connect to Redis
-      await Promise.all([
-        this.client.connect(),
-        this.subscriber.connect(),
-        this.publisher.connect(),
-      ]);
-
-      this.isConnected = true;
-      this.isConnecting = false;
-      logger.info("Successfully connected to Redis");
-    } catch (error) {
-      this.isConnecting = false;
-      logger.error(`Failed to connect to Redis: ${error.message}`);
-      throw error;
-    }
-  }
-
-  _setupEventListeners(client, name) {
-    client.on("error", (error) => {
-      logger.error(`Redis ${name} client error: ${error.message}`);
+      reject(err);
     });
 
-    client.on("connect", () => {
-      logger.info(`Redis ${name} client connected`);
-    });
-
-    client.on("ready", () => {
-      logger.info(`Redis ${name} client ready`);
-    });
-
-    client.on("reconnecting", () => {
-      logger.info(`Redis ${name} client reconnecting`);
-    });
-
-    client.on("end", () => {
-      logger.info(`Redis ${name} client connection closed`);
-      this.isConnected = false;
-    });
-  }
-
-  isClientConnected() {
-    return this.isConnected && this.client?.isOpen;
-  }
-
-  getClient() {
-    if (!this.isClientConnected()) {
-      throw new Error("Redis client not connected");
-    }
-    return this.client;
-  }
-
-  async set(key, value, options = {}) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const serializedValue =
-      typeof value === "object" ? JSON.stringify(value) : value.toString();
-
-    if (options.ttl) {
-      return this.client.set(key, serializedValue, { EX: options.ttl });
-    }
-
-    return this.client.set(key, serializedValue);
-  }
-
-  async get(key, parse = false) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const value = await this.client.get(key);
-
-    if (value && parse) {
-      try {
-        return JSON.parse(value);
-      } catch (error) {
-        logger.warn(
-          `Failed to parse Redis value for key ${key}: ${error.message}`
-        );
-        return value;
-      }
-    }
-
-    return value;
-  }
-
-  async del(key) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    return this.client.del(key);
-  }
-
-  async exists(key) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const result = await this.client.exists(key);
-    return result === 1;
-  }
-
-  async expire(key, seconds) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const result = await this.client.expire(key, seconds);
-    return result === 1;
-  }
-
-  async incr(key, amount = 1) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    if (amount === 1) {
-      return this.client.incr(key);
-    }
-
-    return this.client.incrBy(key, amount);
-  }
-
-  async decr(key, amount = 1) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    if (amount === 1) {
-      return this.client.decr(key);
-    }
-
-    return this.client.decrBy(key, amount);
-  }
-
-  async hset(key, data) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    // Process data to ensure all values are strings
-    const processedData = {};
-    for (const [field, value] of Object.entries(data)) {
-      processedData[field] =
-        typeof value === "object" ? JSON.stringify(value) : value.toString();
-    }
-
-    await this.client.hSet(key, processedData);
-    return true;
-  }
-
-  async hgetall(key) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const data = await this.client.hGetAll(key);
-
-    // If object is empty, return null
-    if (Object.keys(data).length === 0) {
-      return null;
-    }
-
-    // Parse JSON values
-    for (const field in data) {
-      try {
-        if (data[field].startsWith("{") || data[field].startsWith("[")) {
-          data[field] = JSON.parse(data[field]);
-        }
-      } catch (error) {
-        // Keep as string if not valid JSON
-      }
-    }
-
-    return data;
-  }
-
-  async hget(key, field, parse = false) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const value = await this.client.hGet(key, field);
-
-    if (value && parse) {
-      try {
-        return JSON.parse(value);
-      } catch (error) {
-        return value;
-      }
-    }
-
-    return value;
-  }
-
-  async hdel(key, field) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    return this.client.hDel(key, field);
-  }
-
-  async sadd(key, members) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    if (Array.isArray(members)) {
-      return this.client.sAdd(key, members);
-    }
-
-    return this.client.sAdd(key, members);
-  }
-
-  async smembers(key) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    return this.client.sMembers(key);
-  }
-
-  async sismember(key, member) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const result = await this.client.sIsMember(key, member);
-    return result === 1;
-  }
-
-  async srem(key, member) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    return this.client.sRem(key, member);
-  }
-
-  async listAdd(key, element, prepend = false) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const serializedElement =
-      typeof element === "object"
-        ? JSON.stringify(element)
-        : element.toString();
-
-    if (prepend) {
-      return this.client.lPush(key, serializedElement);
-    }
-
-    return this.client.rPush(key, serializedElement);
-  }
-
-  async listRange(key, start = 0, stop = -1, parse = false) {
-    if (!this.isClientConnected()) {
-      await this.init();
-    }
-
-    const elements = await this.client.lRange(key, start, stop);
-
-    if (parse) {
-      return elements.map((element) => {
-        try {
-          return JSON.parse(element);
-        } catch (error) {
-          return element;
-        }
+    redis.on("reconnecting", () => {
+      safeLogger.warn("🔄 Reconnecting to Redis...", {
+        correlationId: getCorrelationId(),
       });
-    }
-
-    return elements;
-  }
-
-  async publish(channel, message) {
-    if (!this.publisher || !this.publisher.isOpen) {
-      await this.init();
-    }
-
-    const serializedMessage =
-      typeof message === "object"
-        ? JSON.stringify(message)
-        : message.toString();
-    return this.publisher.publish(channel, serializedMessage);
-  }
-
-  async subscribe(channel, callback) {
-    if (!this.subscriber || !this.subscriber.isOpen) {
-      await this.init();
-    }
-
-    // Unsubscribe if already subscribed
-    if (this.subscribers.has(channel)) {
-      await this.unsubscribe(channel);
-    }
-
-    // Store callback in subscribers map
-    this.subscribers.set(channel, callback);
-
-    // Subscribe to channel
-    await this.subscriber.subscribe(channel, (message) => {
-      try {
-        // Try to parse message as JSON
-        const parsedMessage = JSON.parse(message);
-        callback(parsedMessage);
-      } catch (error) {
-        // Use raw message if not valid JSON
-        callback(message);
-      }
     });
 
-    logger.info(`Subscribed to Redis channel: ${channel}`);
-  }
-
-  async unsubscribe(channel) {
-    if (!this.subscriber || !this.subscriber.isOpen) {
-      return;
-    }
-
-    await this.subscriber.unsubscribe(channel);
-    this.subscribers.delete(channel);
-    logger.info(`Unsubscribed from Redis channel: ${channel}`);
-  }
-
-  async close() {
-    if (this.subscriber && this.subscriber.isOpen) {
-      await this.subscriber.quit();
-      logger.info("Redis subscriber connection closed");
-    }
-
-    if (this.publisher && this.publisher.isOpen) {
-      await this.publisher.quit();
-      logger.info("Redis publisher connection closed");
-    }
-
-    if (this.client && this.client.isOpen) {
-      await this.client.quit();
-      logger.info("Redis main connection closed");
-    }
-
-    this.isConnected = false;
-  }
+    // Graceful shutdown
+    process.on("SIGINT", async () => {
+      try {
+        await redis.quit();
+        safeLogger.info("🛑 Redis connection closed gracefully");
+        process.exit(0);
+      } catch (err) {
+        safeLogger.error("Error closing Redis on SIGINT", {
+          message: err.message,
+          stack: err.stack,
+        });
+        process.exit(1);
+      }
+    });
+  });
 }
 
-// Create singleton instance
-const redisClient = new RedisClient();
-
-export default redisClient;
+export function getRedisClient() {
+  if (!redis) {
+    const errorMsg = "Redis client not initialized. Call initRedis() first.";
+    safeLogger.error(errorMsg, { correlationId: getCorrelationId() });
+    throw new Error(errorMsg);
+  }
+  return redis;
+}
+export function closeRedisConnection() {
+  if (redis) {
+    return redis.quit().then(() => {
+      safeLogger.info("🛑 Redis connection closed");
+      redis = null;
+    });
+  }
+  return Promise.resolve();
+}
+export function getRedis() {
+  return redis;
+}
+export function isRedisConnected() {
+  return redis && redis.status === "ready";
+}
+export function getRedisInfo() {
+  if (!redis) {
+    const errorMsg = "Redis client not initialized. Call initRedis() first.";
+    safeLogger.error(errorMsg, { correlationId: getCorrelationId() });
+    throw new Error(errorMsg);
+  }
+  return redis.info();
+}

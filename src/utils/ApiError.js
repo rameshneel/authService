@@ -1,16 +1,24 @@
+// src/utils/ApiError.js
 class ApiError extends Error {
   constructor(
     statusCode,
     message = "Something went wrong",
-    errors = [],
+    details = [],
     stack = ""
   ) {
+    if (
+      typeof statusCode !== "number" ||
+      statusCode < 100 ||
+      statusCode > 599
+    ) {
+      throw new Error("Invalid HTTP status code");
+    }
     super(message);
     this.statusCode = statusCode;
-    this.data = null;
     this.message = message;
     this.success = false;
-    this.errors = errors;
+    this.details = details;
+    this.isOperational = true;
 
     if (stack) {
       this.stack = stack;

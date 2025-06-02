@@ -1,13 +1,22 @@
-// authService/src/grpc/proto/auth.proto
 syntax = "proto3";
 
 package authPackage;
 
 service AuthService {
-  rpc Register (RegisterRequest) returns (AuthResponse);
-  rpc Login (LoginRequest) returns (AuthResponse);
-  rpc Logout (LogoutRequest) returns (AuthResponse);
-  rpc CheckAuthStatus (AuthStatusRequest) returns (AuthStatusResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc ValidateToken(TokenRequest) returns (TokenResponse);
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string token = 1;
+  string userId = 2;
+  string error = 3;
 }
 
 message RegisterRequest {
@@ -16,26 +25,17 @@ message RegisterRequest {
   string name = 3;
 }
 
-message LoginRequest {
-  string email = 1;
-  string password = 2;
+message RegisterResponse {
+  string userId = 1;
+  string error = 2;
 }
 
-message LogoutRequest {
+message TokenRequest {
   string token = 1;
 }
 
-message AuthStatusRequest {
-  string token = 1;
-}
-
-message AuthResponse {
-  string message = 1;
-  string token = 2;
-  bool success = 3;
-}
-
-message AuthStatusResponse {
-  bool isAuthenticated = 1;
-  string message = 2;
+message TokenResponse {
+  bool valid = 1;
+  string userId = 2;
+  string error = 3;
 }

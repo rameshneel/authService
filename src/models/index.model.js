@@ -1,9 +1,8 @@
 // authService/src/models/index.model.js
 import sequelize from "../db/index.js";
-import User from "./user.model.js";
-import AuthToken from "./auth-tokens.model.js";
+import AuthUser from "./authuser.model.js";
 
-User.hasMany(AuthToken, { foreignKey: "userId", onDelete: "CASCADE" });
-AuthToken.belongsTo(User, { foreignKey: "userId" });
+AuthUser.hasMany(Session, { foreignKey: "userId", onDelete: "CASCADE" });
+Session.belongsTo(AuthUser, { foreignKey: "userId" });
 
-export { sequelize, User, AuthToken };
+export { sequelize, AuthUser };
