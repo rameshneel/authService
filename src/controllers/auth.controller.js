@@ -8,12 +8,15 @@ import { env } from "../config/env.js";
 import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
 import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
-import { safeLogger } from "../config/logger.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../crypto/tokenService.js";
 
-export const generateTokens = async (user) => {
+const generateTokens = async (user) => {
   try {
-    const accessToken = await user.generateAccessToken();
-    const refreshToken = await user.generateRefreshToken();
+    const accessToken = await generateAccessToken(user);
+    const refreshToken = await generateRefreshToken(user);
 
     user.refreshToken = refreshToken;
     await user.save();

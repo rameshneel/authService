@@ -4,9 +4,7 @@ dotenv.config();
 
 export const env = {
   PORT: process.env.PORT || 3000,
-  ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET || "your_jwt_secret",
   REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || "your_jwt_secret",
-  ACCESS_TOKEN_EXPIRY: process.env.ACCESS_TOKEN_EXPIRY || "30min",
   REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || "30min",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "your_google_client_id",
   GOOGLE_CLIENT_SECRET:
@@ -28,4 +26,7 @@ export const env = {
   GRPC_AUTH_SERVICE_PORT: process.env.GRPC_AUTH_SERVICE_PORT || "50050",
   GRPC_USER_SERVICE_HOST: process.env.GRPC_USER_SERVICE_HOST || "localhost",
   GRPC_USER_SERVICE_PORT: process.env.GRPC_USER_SERVICE_PORT || "50051",
+  PRIVATE_KEY_EXIPRY: process.env.PRIVATE_KEY_EXIPRY || "1h",
+  KEY_ROTATION_TIME: process.env.KEY_ROTATION_TIME || "2h",
+  PRIVATE_KEY_RETENTION: process.env.PRIVATE_KEY_RETENTION || "2h",
 };

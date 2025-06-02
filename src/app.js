@@ -40,8 +40,13 @@ app.use(cookieParser());
 app.use(correlationIdMiddleware);
 app.use("/public", express.static(path.join(__dirname, "..", "public")));
 
-// ✅ Routes
+//routes import
+import authRoutes from "./routes/auth.route.js";
+import jwkRoutes from "./routes/jwk.route.js";
+
+//routes declaration
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/jwk", jwkRoutes);
 
 app.get("/health", (req, res) => res.status(200).send("OK"));
 

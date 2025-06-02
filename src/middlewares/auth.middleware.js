@@ -1,11 +1,8 @@
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import jwt from "jsonwebtoken";
 import AuthUser from "../models/authuser.model.js";
-import { env } from "../config/env.js";
-import { authCache } from "../cache/auth.cache.js";
-import { safeLogger } from "../config/logger.js";
-import { getCorrelationId } from "../config/requestContext.js";
+import { jwtVerify } from "jose";
+import { getPublicKey } from "../crypto/getKeys.js";
 
 export const verifyJWT = asyncHandler(async (req, res, next) => {
   const correlationId = getCorrelationId();
@@ -22,14 +19,22 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     safeLogger.info("Verifying JWT token", { correlationId });
 
     // Check if token is blacklisted
-    const isBlacklisted = await authCache.isTokenBlacklisted(token);
-    if (isBlacklisted) {
-      safeLogger.warn("Token is blacklisted", { correlationId });
-      throw new ApiError(401, "Token has been invalidated");
+    // const isBlacklisted = await authCache.isTokenBlacklisted(token);
+    // if (isBlacklisted) {
+    //   throw new ApiError(401, "Token has been invalidated");
+    // }
+
+    const signingKey = await getPublicKey();
+
+    if (!signingKey) {
+      throw new ApiError(500, "Signing key not found");
     }
 
-    const decoded = jwt.verify(token, env.ACCESS_TOKEN_SECRET);
-    const user = await AuthUser.findByPk(decoded.id);
+    const { payload } = await jwtVerify(token, signingKey, {
+      algorithms: ["RS256"],
+    });
+
+    const user = await AuthUser.findByPk(payload.id);
 
     if (!user || !user.isActive) {
       safeLogger.warn("User not found or inactive", {
@@ -40,15 +45,11 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     }
 
     // Get and update session data
-    const sessionData = await authCache.getUserSession(user.id);
-    if (sessionData) {
-      sessionData.lastActive = new Date().toISOString();
-      await authCache.storeUserSession(user.id, sessionData);
-      safeLogger.info("Updated user session", {
-        userId: user.id,
-        correlationId,
-      });
-    }
+    // const sessionData = await authCache.getUserSession(user.id);
+    // if (sessionData) {
+    //   sessionData.lastActive = new Date().toISOString();
+    //   await authCache.storeUserSession(user.id, sessionData);
+    // }
 
     // Attach auth user details to the request
     req.user = {
