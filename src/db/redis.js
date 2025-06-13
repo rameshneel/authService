@@ -1,6 +1,5 @@
 import Redis from "ioredis";
 import { env } from "../config/env.js";
-import { getCorrelationId } from "../config/requestContext.js";
 import { safeLogger } from "../config/logger.js";
 
 let redis;
@@ -21,15 +20,11 @@ export async function initRedis() {
 
     // Redis Events
     redis.on("connect", () => {
-      safeLogger.info("✅ Redis connected", {
-        correlationId: getCorrelationId(),
-      });
+      safeLogger.info("✅ Redis connected");
     });
 
     redis.on("ready", () => {
-      safeLogger.info("🚀 Redis client is ready", {
-        correlationId: getCorrelationId(),
-      });
+      safeLogger.info("🚀 Redis client is ready");
       resolve(redis);
     });
 
@@ -39,20 +34,12 @@ export async function initRedis() {
           ? "❌ Redis connection refused"
           : "❌ Redis encountered an error";
 
-      safeLogger.error(message, {
-        message: err.message,
-        stack: err.stack,
-        code: err.code,
-        correlationId: getCorrelationId(),
-      });
-
+      safeLogger.error(message);
       reject(err);
     });
 
     redis.on("reconnecting", () => {
-      safeLogger.warn("🔄 Reconnecting to Redis...", {
-        correlationId: getCorrelationId(),
-      });
+      safeLogger.warn("🔄 Reconnecting to Redis...");
     });
 
     // Graceful shutdown
@@ -75,7 +62,7 @@ export async function initRedis() {
 export function getRedisClient() {
   if (!redis) {
     const errorMsg = "Redis client not initialized. Call initRedis() first.";
-    safeLogger.error(errorMsg, { correlationId: getCorrelationId() });
+    safeLogger.error(errorMsg);
     throw new Error(errorMsg);
   }
   return redis;
@@ -98,7 +85,7 @@ export function isRedisConnected() {
 export function getRedisInfo() {
   if (!redis) {
     const errorMsg = "Redis client not initialized. Call initRedis() first.";
-    safeLogger.error(errorMsg, { correlationId: getCorrelationId() });
+    safeLogger.error(errorMsg);
     throw new Error(errorMsg);
   }
   return redis.info();

@@ -10,37 +10,28 @@ import AsyncRetry from "async-retry";
 
 // Initialize gRPC services
 async function initializeGrpcServices() {
-  const correlationId = getCorrelationId();
-
   try {
-    safeLogger.info("Initializing gRPC services", { correlationId });
-
     // Check user service health with retry
-    await AsyncRetry(
-      async () => {
-        await checkUserServiceHealth();
-        safeLogger.info("Successfully connected to UserService", {
-          correlationId,
-        });
-      },
-      {
-        retries: 3,
-        factor: 2,
-        minTimeout: 1000,
-        maxTimeout: 5000,
-        onRetry: (error, attempt) => {
-          logError(
-            `Retry attempt ${attempt} for UserService health check`,
-            error,
-            { correlationId }
-          );
-        },
-      }
-    );
+    // await AsyncRetry(
+    //   async () => {
+    //     // await checkUserServiceHealth();
+    //   },
+    //   {
+    //     retries: 3,
+    //     factor: 2,
+    //     minTimeout: 1000,
+    //     maxTimeout: 5000,
+    //     onRetry: (error, attempt) => {
+    //       safeLogger.info(
+    //         `Retry attempt ${attempt} for UserService health check`,
+    //         error
+    //       );
+    //     },
+    //   }
+    // );
 
     // Start auth gRPC server
     await startAuthGrpcServer();
-    safeLogger.info("Auth gRPC server initialized", { correlationId });
   } catch (error) {
     const apiError =
       error instanceof ApiError
@@ -48,23 +39,17 @@ async function initializeGrpcServices() {
         : new ApiError(500, "Failed to initialize gRPC services", [
             error.message,
           ]);
-    safeLogger.error("gRPC services initialization failed", apiError, {
-      correlationId,
-    });
+    safeLogger.error("gRPC services initialization failed", apiError);
     throw apiError;
   }
 }
 
 // Graceful shutdown of gRPC services
 async function shutdownGrpcServices() {
-  const correlationId = getCorrelationId() || uuidv4();
-
   try {
-    safeLogger.info("Shutting down gRPC services", { correlationId });
     await stopAuthGrpcServer();
-    safeLogger.info("gRPC services shut down successfully", { correlationId });
   } catch (error) {
-    logError("Error during gRPC services shutdown", error, { correlationId });
+    safeLogger.error("Error during gRPC services shutdown");
     throw new ApiError(500, "Failed to shut down gRPC services", [
       error.message,
     ]);

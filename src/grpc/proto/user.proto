@@ -10,10 +10,10 @@ service UserService {
 message CreateProfileRequest {
   string email = 1;
   string type = 2;
-  string fullName = 3;
-  string name = 4;
-  string companyName = 5;
-  string country = 6;
+  string name = 3;
+  string companyName = 4;
+  string country = 5;
+  string designation = 6;
   string role = 7;
 }
 
@@ -31,7 +31,8 @@ message GetUserRequest {
 message GetUserResponse {
   string userId = 1;
   string email = 2;
-  string fullName = 3;
+  string name = 3;
   string type = 4;
-  bool success = 5;
+  string role = 5;
+  bool success = 6;
 }

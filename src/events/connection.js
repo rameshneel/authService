@@ -2,7 +2,6 @@ import amqplib from "amqplib";
 import { rabbitMQConfig, EXCHANGE_TYPES } from "../config/rabbitMQ.js";
 import { safeLogger } from "../config/logger.js";
 import { ApiError } from "../utils/ApiError.js";
-import { getCorrelationId } from "../config/requestContext.js";
 
 class RabbitMQConnection {
   constructor() {
@@ -18,11 +17,9 @@ class RabbitMQConnection {
 
   async init() {
     if (this.connection || this.isConnecting) return;
-    const correlationId = getCorrelationId();
-
     try {
       this.isConnecting = true;
-      safeLogger.info("Connecting to RabbitMQ", { correlationId });
+      safeLogger.info("Connecting to RabbitMQ");
 
       this.connection = await amqplib.connect(
         rabbitMQConfig.url,
@@ -32,7 +29,7 @@ class RabbitMQConnection {
       this.reconnectAttempts = 0;
       this.isConnecting = false;
 
-      safeLogger.info("Successfully connected to RabbitMQ", { correlationId });
+      safeLogger.info("Successfully connected to RabbitMQ");
       this._setupEventListeners();
       await this._setupDeadLetterExchange();
       await this._setupDefaultExchanges();
@@ -42,26 +39,22 @@ class RabbitMQConnection {
       safeLogger.error("Failed to connect to RabbitMQ", {
         message: error.message,
         stack: error.stack,
-        correlationId,
       });
       await this._handleReconnect();
     }
   }
 
   _setupEventListeners() {
-    const correlationId = getCorrelationId();
-
     this.connection.on("error", async (error) => {
       safeLogger.error("RabbitMQ connection error", {
         message: error.message,
         stack: error.stack,
-        correlationId,
       });
       await this._handleReconnect();
     });
 
     this.connection.on("close", async () => {
-      safeLogger.warn("RabbitMQ connection closed", { correlationId });
+      safeLogger.warn("RabbitMQ connection closed");
       await this._handleReconnect();
     });
   }

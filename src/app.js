@@ -9,7 +9,6 @@ import { correlationIdMiddleware } from "./config/requestContext.js";
 import { errorHandler } from "./utils/errorHandler.js";
 import { env } from "./config/env.js";
 import { safeLogger } from "./config/logger.js";
-import authRoutes from "./routes/auth.route.js";
 
 const allowedOrigins = env.CORS_ORIGINS.split(",");
 const app = express();
@@ -43,10 +42,12 @@ app.use("/public", express.static(path.join(__dirname, "..", "public")));
 //routes import
 import authRoutes from "./routes/auth.route.js";
 import jwkRoutes from "./routes/jwk.route.js";
+import companyRoutes from "./routes/company.route.js";
 
 //routes declaration
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/jwk", jwkRoutes);
+app.use("/api/v1/admin", companyRoutes);
 
 app.get("/health", (req, res) => res.status(200).send("OK"));
 

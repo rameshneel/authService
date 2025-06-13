@@ -1,17 +1,16 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import axios from "axios";
 import AuthUser from "../models/authuser.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
-import jwt from "jsonwebtoken";
 import { authCache } from "../cache/auth.cache.js";
 import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
 import {
   generateAccessToken,
   generateRefreshToken,
 } from "../crypto/tokenService.js";
+import { safeLogger } from "../config/logger.js";
 
 const generateTokens = async (user) => {
   try {
@@ -22,12 +21,7 @@ const generateTokens = async (user) => {
     await user.save();
     return { accessToken, refreshToken };
   } catch (error) {
-    safeLogger.error("Error generating tokens", {
-      message: error.message,
-      stack: error.stack,
-      userId: user.id,
-    });
-    throw new ApiError(500, "Failed to generate tokens", [error.message]);
+    throw new ApiError(500, "Failed to generate tokens", error);
   }
 };
 
@@ -55,7 +49,9 @@ export const signupUser = asyncHandler(async (req, res, next) => {
     throw new ApiError(400, "Validation error", errorMessages);
   }
 
-  const { email, password, ...profileData } = value;
+  const profileData = value;
+
+  const { email, password } = profileData;
 
   const existingUser = await AuthUser.findOne({ where: { email, type } });
   if (existingUser) {
@@ -63,13 +59,7 @@ export const signupUser = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    const userData = {
-      email,
-      type,
-      fullName: profileData.fullName,
-    };
-
-    const userResponse = await createUserProfile(userData);
+    const userResponse = await createUserProfile(profileData);
 
     if (!userResponse) {
       throw new ApiError(400, "Failed to create user profile");
@@ -102,12 +92,6 @@ export const signupUser = asyncHandler(async (req, res, next) => {
       )
     );
   } catch (error) {
-    safeLogger.error("Signup error", {
-      message: error.message,
-      stack: error.stack,
-      email,
-      type,
-    });
     next(error);
   }
 });
@@ -150,15 +134,15 @@ export const loginUser = asyncHandler(async (req, res, next) => {
 
     const { accessToken, refreshToken } = await generateTokens(user);
 
-    const sessionData = {
-      userId: user.id,
-      email: user.email,
-      type: user.type,
-      lastActive: new Date().toISOString(),
-    };
+    // const sessionData = {
+    //   userId: user.id,
+    //   email: user.email,
+    //   type: user.type,
+    //   lastActive: new Date().toISOString(),
+    // };
 
-    await authCache.storeUserSession(user.id, sessionData);
-    await authCache.addUserSession(user.id, refreshToken);
+    // await authCache.storeUserSession(user.id, sessionData);
+    // await authCache.addUserSession(user.id, refreshToken);
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,
@@ -175,16 +159,19 @@ export const loginUser = asyncHandler(async (req, res, next) => {
       type,
     });
 
+    const { name, userId } = userResponse;
+
     return res.status(200).json(
       new ApiResponse(
         200,
         {
           token: accessToken,
           user: {
-            id: user.id,
-            linkedUserId: userResponse,
+            id: parseInt(userId),
+            name,
             email: user.email,
             type: user.type,
+            linkedUserId: user.linkedUserId,
             provider: user.provider,
             emailVerified: user.emailVerified,
           },
@@ -207,10 +194,10 @@ export const logoutUser = asyncHandler(async (req, res, next) => {
   try {
     const { refreshToken } = req.cookies;
 
-    if (refreshToken) {
-      await authCache.blacklistToken(refreshToken);
-      await authCache.removeUserSession(req.user.id, refreshToken);
-    }
+    // if (refreshToken) {
+    //   await authCache.blacklistToken(refreshToken);
+    //   await authCache.removeUserSession(req.user.id, refreshToken);
+    // }
 
     safeLogger.info("User logged out successfully", {
       userId: req.user?.id,
@@ -309,7 +296,7 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
       throw new ApiError(403, "User not found or inactive");
     }
 
-    const accessToken = await user.generateAccessToken();
+    const accessToken = await generateAccessToken(user);
 
     res.cookie("accessToken", accessToken, {
       ...cookieOptions,
@@ -396,18 +383,15 @@ export const googleCallback = asyncHandler(async (req, res, next) => {
     if (!user) {
       let userId;
       try {
-        const response = await axios.post(
-          `${env.USER_SERVICE_URL}/user/create-profile`,
-          {
-            email: userInfo.email,
-            type: "customer",
-            fullName: userInfo.name,
-          }
-        );
+        const response = await createUserProfile({
+          email: userInfo.email,
+          type: "customer",
+          name: userInfo.name,
+        });
 
-        console.log("response", response.data);
+        console.log("response", response);
 
-        userId = response.data?.userId;
+        userId = response.userId;
       } catch (error) {
         throw new ApiError(
           error.response?.status || 500,

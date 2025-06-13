@@ -160,7 +160,6 @@ server.addService(authPackage.AuthService.service, authServiceImpl);
 // Start server
 export async function startAuthGrpcServer() {
   const address = `${env.GRPC_AUTH_SERVICE_HOST}:${env.GRPC_AUTH_SERVICE_PORT}`;
-  const correlationId = getCorrelationId();
 
   return new Promise((resolve, reject) => {
     server.bindAsync(
@@ -172,17 +171,14 @@ export async function startAuthGrpcServer() {
             message: error.message,
             stack: error.stack,
             address,
-            correlationId,
           });
           reject(
             new ApiError(500, "Failed to bind gRPC server", [error.message])
           );
           return;
         }
-        server.start();
         safeLogger.info(`Auth gRPC server running at ${address}`, {
           port,
-          correlationId,
         });
         resolve();
       }
@@ -192,23 +188,20 @@ export async function startAuthGrpcServer() {
 
 // Stop server
 export async function stopAuthGrpcServer() {
-  const correlationId = getCorrelationId();
-
   return new Promise((resolve, reject) => {
     server.tryShutdown((error) => {
       if (error) {
         safeLogger.error("Error during auth gRPC server shutdown", {
           message: error.message,
           stack: error.stack,
-          correlationId,
         });
         server.forceShutdown();
-        safeLogger.info("Auth gRPC server force stopped", { correlationId });
+        safeLogger.info("Auth gRPC server force stopped");
         reject(
           new ApiError(500, "Failed to shut down gRPC server", [error.message])
         );
       } else {
-        safeLogger.info("Auth gRPC server stopped", { correlationId });
+        safeLogger.info("Auth gRPC server stopped");
         resolve();
       }
     });

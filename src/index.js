@@ -5,21 +5,23 @@ import { initRedis } from "./db/redis.js";
 import { initializeGrpcServices } from "./grpc/index.js";
 import { safeLogger } from "./config/logger.js";
 import { initializeRabbitMQ } from "./events/index.js";
+import { startKeyRotationJob } from "./crypto/startKeyRotationJob.js";
 
 async function startServer() {
   try {
+    startKeyRotationJob();
     await sequelize.authenticate();
     await sequelize.sync({ force: false });
     safeLogger.info("✔️ Database connected and tables synchronized");
 
-    await initializeGrpcServices();
-    safeLogger.info("✔️ gRPC server initialized");
+    // await initializeGrpcServices();
+    // safeLogger.info("✔️ gRPC server initialized");
 
-    await initRedis();
-    safeLogger.info("✔️ Redis connection successful");
+    // await initRedis();
+    // safeLogger.info("✔️ Redis connection successful");
 
-    await initializeRabbitMQ();
-    safeLogger.info("✔️ RabbitMQ connection initialized");
+    // await initializeRabbitMQ();
+    // safeLogger.info("✔️ RabbitMQ connection initialized");
 
     const server = app.listen(env.PORT, () => {
       safeLogger.info(`⚙️ Server is running on port ${env.PORT}`);

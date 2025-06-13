@@ -9,6 +9,7 @@ export async function generateAccessToken(user) {
     email: user.email,
     type: user.type,
     linkedUserId: user.linkedUserId,
+    role: user.role,
   };
 
   const token = await new SignJWT(payload)
