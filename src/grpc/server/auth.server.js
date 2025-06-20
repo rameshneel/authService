@@ -25,48 +25,8 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 const grpcObject = grpc.loadPackageDefinition(packageDefinition);
 const authPackage = grpcObject.authPackage;
 
-// Initialize gRPC server
 const server = new grpc.Server();
 
-// Map ApiError to gRPC status codes
-const mapToGrpcError = (error) => {
-  let status = grpc.status.INTERNAL;
-  let message = "Internal Server Error";
-  let details = [];
-
-  if (error instanceof ApiError) {
-    switch (error.statusCode) {
-      case 400:
-        status = grpc.status.INVALID_ARGUMENT;
-        break;
-      case 401:
-        status = grpc.status.UNAUTHENTICATED;
-        break;
-      case 404:
-        status = grpc.status.NOT_FOUND;
-        break;
-      case 503:
-        status = grpc.status.UNAVAILABLE;
-        break;
-      default:
-        status = grpc.status.INTERNAL;
-    }
-    message = error.message;
-    details = error.details;
-  } else {
-    message = error.message || "Unknown error";
-    details = [error.message];
-  }
-
-  return new grpc.statusBuilder()
-    .withCode(status)
-    .withDetails(
-      JSON.stringify({ message, details, correlationId: getCorrelationId() })
-    )
-    .build();
-};
-
-// Auth service implementation
 const authServiceImpl = {
   Login: async (call, callback) => {
     const { email, password } = call.request;
@@ -154,58 +114,35 @@ const authServiceImpl = {
   },
 };
 
-// Add service to server
 server.addService(authPackage.AuthService.service, authServiceImpl);
 
-// Start server
-export async function startAuthGrpcServer() {
+export const startGrpcServer = async () => {
   const address = `${env.GRPC_AUTH_SERVICE_HOST}:${env.GRPC_AUTH_SERVICE_PORT}`;
-
   return new Promise((resolve, reject) => {
     server.bindAsync(
       address,
       grpc.ServerCredentials.createInsecure(),
-      (error, port) => {
-        if (error) {
-          safeLogger.error("Failed to bind auth gRPC server", {
-            message: error.message,
-            stack: error.stack,
-            address,
-          });
-          reject(
-            new ApiError(500, "Failed to bind gRPC server", [error.message])
-          );
-          return;
+      (err) => {
+        if (err) {
+          safeLogger.error("Error starting gRPC server", err);
+          reject(err);
         }
-        safeLogger.info(`Auth gRPC server running at ${address}`, {
-          port,
-        });
+        safeLogger.info(`grpc server is running on ${address}`);
         resolve();
       }
     );
   });
-}
+};
 
-// Stop server
-export async function stopAuthGrpcServer() {
-  return new Promise((resolve, reject) => {
-    server.tryShutdown((error) => {
-      if (error) {
-        safeLogger.error("Error during auth gRPC server shutdown", {
-          message: error.message,
-          stack: error.stack,
-        });
+export const stopGrpcServer = () => {
+  return new Promise((resolve) => {
+    server.tryShutdown((err) => {
+      if (err) {
+        safeLogger.error("Error during graceful shutdown:", err);
         server.forceShutdown();
-        safeLogger.info("Auth gRPC server force stopped");
-        reject(
-          new ApiError(500, "Failed to shut down gRPC server", [error.message])
-        );
-      } else {
-        safeLogger.info("Auth gRPC server stopped");
-        resolve();
       }
+      safeLogger.info("Company gRPC server stopped");
+      resolve();
     });
   });
-}
-
-export { server };
+};

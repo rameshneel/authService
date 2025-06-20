@@ -1,12 +1,12 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import AuthUser from "../models/authuser.model.js";
+import AuthUser from "../models/authUser.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { authCache } from "../cache/auth.cache.js";
-import { createProfileSchemas } from "../validators/validation.js";
+// import { createProfileSchemas } from "../validators/validation.js";
 import { generate } from "generate-password";
 import { safeLogger } from "../config/logger.js";
-import { createUserProfile } from "../grpc/client/userClient.js";
+import { createUserProfile } from "../grpc/client/user.client.js";
 
 export const createSuperAdmin = asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.body;
@@ -69,7 +69,11 @@ export const createSuperAdmin = asyncHandler(async (req, res, next) => {
 
 export const createProfile = asyncHandler(async (req, res, next) => {
   const { error, value } = createProfileSchemas(req.body);
-  const { role: loggedInUserRole, type: loggedInUserType } = req.user;
+  const {
+    userId: loggedInUserId,
+    role: loggedInUserRole,
+    type: loggedInUserType,
+  } = req.user;
   const type = "company";
   try {
     if (error) {
@@ -98,8 +102,12 @@ export const createProfile = asyncHandler(async (req, res, next) => {
     safeLogger.info("generating company profile");
 
     let userData = { email, name, role, type };
+    let relationship = {
+      reportsToId: loggedInUserId,
+      reportsToRole: loggedInUserRole,
+    };
 
-    const userResponse = await createUserProfile(userData);
+    const userResponse = await createUserProfile(userData, relationship);
 
     if (!userResponse) {
       throw new ApiError(400, `Failed to create ${role} profile`);

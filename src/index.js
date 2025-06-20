@@ -2,7 +2,7 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import sequelize from "./db/index.js";
 import { initRedis } from "./db/redis.js";
-import { initializeGrpcServices } from "./grpc/index.js";
+import { initializeGrpcServices, shutdownGrpcServices } from "./grpc/index.js";
 import { safeLogger } from "./config/logger.js";
 import { initializeRabbitMQ } from "./events/index.js";
 import { startKeyRotationJob } from "./crypto/startKeyRotationJob.js";
@@ -14,8 +14,8 @@ async function startServer() {
     await sequelize.sync({ force: false });
     safeLogger.info("✔️ Database connected and tables synchronized");
 
-    // await initializeGrpcServices();
-    // safeLogger.info("✔️ gRPC server initialized");
+    await initializeGrpcServices();
+    safeLogger.info("✔️ gRPC server initialized");
 
     // await initRedis();
     // safeLogger.info("✔️ Redis connection successful");
@@ -29,6 +29,7 @@ async function startServer() {
 
     const gracefulShutdown = async () => {
       safeLogger.info("🔻 Graceful shutdown initiated");
+      await shutdownGrpcServices();
       await sequelize.close();
       server.close(() => {
         safeLogger.info("🧹 Express server closed");

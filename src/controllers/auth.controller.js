@@ -1,11 +1,11 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import AuthUser from "../models/authuser.model.js";
+import AuthUser from "../models/authUser.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { signupSchemas, commonLoginSchema } from "../validators/validation.js";
 import { env } from "../config/env.js";
 import { authCache } from "../cache/auth.cache.js";
-import { createUserProfile, getUserById } from "../grpc/client/userClient.js";
+import { createUserProfile, getUserById } from "../grpc/client/user.client.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -34,14 +34,8 @@ export const cookieOptions = {
 };
 
 export const signupUser = asyncHandler(async (req, res, next) => {
-  const type = req?.body?.type?.toLowerCase();
-  const schema = signupSchemas[type];
+  const { error, value } = signupSchemas(req.body);
 
-  if (!schema) {
-    throw new ApiError(400, "Invalid user type");
-  }
-
-  const { error, value } = schema.validate(req.body);
   if (error) {
     const errorMessages = error.details.map((err) =>
       err.message.replace(/["]/g, "")
@@ -49,17 +43,22 @@ export const signupUser = asyncHandler(async (req, res, next) => {
     throw new ApiError(400, "Validation error", errorMessages);
   }
 
-  const profileData = value;
-
-  const { email, password } = profileData;
+  const { fullName, email, password, type, role } = value;
 
   const existingUser = await AuthUser.findOne({ where: { email, type } });
   if (existingUser) {
     throw new ApiError(400, `${type} already exists with this email`);
   }
 
+  const userData = {
+    fullName,
+    email,
+    type,
+    role,
+  };
+
   try {
-    const userResponse = await createUserProfile(profileData);
+    const userResponse = await createUserProfile(userData);
 
     if (!userResponse) {
       throw new ApiError(400, "Failed to create user profile");
@@ -67,15 +66,23 @@ export const signupUser = asyncHandler(async (req, res, next) => {
 
     const { userId } = userResponse;
     const authUser = await AuthUser.create({
+      fullName,
       email,
       password,
       type,
-      linkedUserId: userId,
+      role,
+      userId,
     });
+
+    if (!authUser) {
+      throw new ApiError(400, "Failed to create auth user");
+      // delete user profile event
+    }
 
     safeLogger.info("User registered successfully", {
       userId,
       authId: authUser.id,
+      fullName,
       type,
     });
 
@@ -84,8 +91,8 @@ export const signupUser = asyncHandler(async (req, res, next) => {
         201,
         {
           authId: authUser.id,
-          userId,
-          email: authUser.email,
+          email,
+          fullName,
           type,
         },
         `${type} registered successfully`

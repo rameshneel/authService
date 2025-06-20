@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { env } from "../../config/env.js";
 import { safeLogger } from "../../config/logger.js";
 import { ApiError } from "../../utils/ApiError.js";
+// import { isServiceHealthy } from "./userHealth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,39 +30,14 @@ const client = new userPackage.UserService(
 
 const DEADLINE_MS = 10000;
 
-// Health check
-// export const checkUserServiceHealth = () => {
-//   return new Promise((resolve, reject) => {
-//     const deadline = Date.now() + 5000;
-
-//     client.waitForReady(deadline, (error) => {
-//       if (error) {
-//         safeLogger.error("UserService not ready", {
-//           message: error.message,
-//           code: error.code,
-//           details: error.details,
-//           stack: error.stack,
-//         });
-
-//         return reject(
-//           new ApiError(
-//             error.code === grpc.status.DEADLINE_EXCEEDED ? 504 : 503,
-//             "gRPC Service Unavailable",
-//             [error.message]
-//           )
-//         );
-//       }
-
-//       safeLogger.info("UserService is ready");
-//       resolve();
-//     });
-//   });
-// };
-
 // Create user profile
 export const createUserProfile = (userData) => {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + DEADLINE_MS;
+
+    // if (!isServiceHealthy()) {
+    //   return reject(new ApiError(500, "User service is not healthy"));
+    // }
 
     safeLogger.info("Sending user data to UserService", {
       userData,

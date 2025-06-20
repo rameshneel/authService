@@ -18,12 +18,16 @@ const AuthUser = sequelize.define(
         isEmail: true,
       },
     },
+    fullName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     password: {
       type: DataTypes.STRING,
       allowNull: true,
       defaultValue: null,
     },
-    linkedUserId: {
+    userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 1,
@@ -44,10 +48,6 @@ const AuthUser = sequelize.define(
     providerId: {
       type: DataTypes.STRING,
       allowNull: true,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
     },
     deviceInfo: {
       type: DataTypes.JSON,
